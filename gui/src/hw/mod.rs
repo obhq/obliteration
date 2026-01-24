@@ -2,7 +2,7 @@
 pub use self::console::*;
 pub use self::vmm::*;
 
-use hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf, LockedMem};
+use hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
@@ -48,11 +48,11 @@ fn read_usize(exit: &mut impl CpuIo) -> Result<usize, MmioError> {
         .map_err(|_| MmioError::InvalidData)
 }
 
-fn read_ptr<'a, H: Hypervisor>(
+fn read_ptr<H: Hypervisor>(
     exit: &mut impl CpuIo,
     len: NonZero<usize>,
-    hv: &'a H,
-) -> Result<LockedMem<'a>, MmioError> {
+    hv: &H,
+) -> Result<*mut u8, MmioError> {
     // Get data.
     let IoBuf::Write(buf) = exit.buffer() else {
         return Err(MmioError::InvalidOperation);
@@ -70,9 +70,12 @@ fn read_ptr<'a, H: Hypervisor>(
         .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, Box::new(e)))?;
 
     // Get data.
-    hv.ram()
-        .lock(paddr, len)
-        .ok_or(MmioError::InvalidAddr { vaddr, paddr })
+    let ptr = hv.ram().slice(paddr, len);
+
+    match ptr.is_null() {
+        true => Err(MmioError::InvalidAddr { vaddr, paddr }),
+        false => Ok(ptr),
+    }
 }
 
 /// Contains all virtual devices (except RAM) for the VM.

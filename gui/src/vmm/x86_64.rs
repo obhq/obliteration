@@ -12,7 +12,10 @@ pub fn setup_main_cpu<H: Hypervisor>(
     cpu: &mut H::Cpu<'_>,
     entry: usize,
     map: RamMap,
+    page_size: NonZero<usize>,
 ) -> Result<(), MainCpuError> {
+    let _ = page_size;
+
     // Set CR3 to page-map level-4 table.
     let mut states = cpu
         .states()

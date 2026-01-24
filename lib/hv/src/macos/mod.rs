@@ -1,38 +1,30 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::HvfCpu;
-use self::mapper::HvfMapper;
 use super::{CpuFeats, Hypervisor, HypervisorExt, Ram};
 use applevisor_sys::hv_feature_reg_t::{
     HV_FEATURE_REG_ID_AA64MMFR0_EL1, HV_FEATURE_REG_ID_AA64MMFR1_EL1,
     HV_FEATURE_REG_ID_AA64MMFR2_EL1,
 };
 use applevisor_sys::{
-    hv_feature_reg_t, hv_return_t, hv_vcpu_config_create, hv_vcpu_config_get_feature_reg,
-    hv_vcpu_config_t, hv_vcpu_create, hv_vcpu_set_trap_debug_exceptions, hv_vm_create,
-    hv_vm_destroy, hv_vm_get_max_vcpu_count,
+    HV_MEMORY_EXEC, HV_MEMORY_READ, HV_MEMORY_WRITE, hv_feature_reg_t, hv_return_t,
+    hv_vcpu_config_create, hv_vcpu_config_get_feature_reg, hv_vcpu_config_t, hv_vcpu_create,
+    hv_vcpu_set_trap_debug_exceptions, hv_vm_create, hv_vm_destroy, hv_vm_get_max_vcpu_count,
+    hv_vm_map,
 };
 use std::num::NonZero;
 use std::ptr::{null, null_mut};
 use thiserror::Error;
 
 mod cpu;
-mod mapper;
 
-/// `page_size` is a page size on the VM. This value will be used as a block size if it is larger
-/// than page size on the host otherwise block size will be page size on the host.
-///
-/// `ram_size` must be multiply by the block size calculated from the above.
-///
-/// # Panics
-/// If `page_size` is not power of two.
+/// `ram_size` must be multiply by page size on the host.
 pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
-    page_size: NonZero<usize>,
     debug: bool,
 ) -> Result<impl HypervisorExt, HvError> {
     // Create RAM.
-    let ram = Ram::new(page_size, ram_size, HvfMapper)?;
+    let ram = Ram::new(ram_size)?;
 
     // Create a VM.
     let ret = unsafe { hv_vm_create(null_mut()) };
@@ -70,16 +62,6 @@ pub fn new(
         .map_err(HvError::ReadMmfr2Failed)?
         .into();
 
-    // Check if PE support VM page size.
-    match page_size.get() {
-        0x4000 => {
-            if hv.feats.mmfr0.t_gran16() == 0b0000 {
-                return Err(HvError::PageSizeNotSupported(page_size));
-            }
-        }
-        _ => todo!(),
-    }
-
     // Check if PE support RAM size.
     let max = match hv.feats.mmfr0.pa_range() {
         0b0000 => 1024usize.pow(3) * 4,
@@ -95,6 +77,14 @@ pub fn new(
 
     if ram_size.get() > max {
         return Err(HvError::RamSizeNotSupported(ram_size));
+    }
+
+    // Set RAM.
+    let prot = HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC;
+    let ret = unsafe { hv_vm_map(hv.ram.as_ptr().cast(), 0, hv.ram.len().get(), prot) };
+
+    if let Some(v) = NonZero::new(ret) {
+        return Err(HvError::MapRam(v));
     }
 
     Ok(hv)
@@ -209,11 +199,11 @@ pub enum HvError {
     #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
     ReadMmfr2Failed(NonZero<hv_return_t>),
 
-    #[error("your CPU does not support {0:#x} page size on a VM")]
-    PageSizeNotSupported(NonZero<usize>),
-
     #[error("your CPU does not support {0:#x} bytes of RAM on a VM")]
     RamSizeNotSupported(NonZero<usize>),
+
+    #[error("couldn't map the RAM to the VM ({0:#x})")]
+    MapRam(NonZero<hv_return_t>),
 
     #[error("couldn't create a vCPU ({0:#x})")]
     CreateCpu(NonZero<hv_return_t>),

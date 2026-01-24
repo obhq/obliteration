@@ -7,11 +7,11 @@ use self::kernel::{
 use crate::hw::{Device, DeviceTree, setup_devices};
 use crate::profile::{CpuModel, Profile};
 use crate::util::channel::{Receiver, Sender};
-use config::{BootEnv, ConsoleType, KernelMap, MapType, PhysMap, Vm};
+use config::{BootEnv, Config, ConsoleType, KernelMap, MapType, PhysMap, Vm};
 use futures::FutureExt;
 use hv::{
     CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, PhysMapping,
-    RamBuilder, RamBuilderError, RamError,
+    RamBuilder, RamBuilderError,
 };
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
@@ -163,8 +163,7 @@ impl Vmm<()> {
 
         // Setup hypervisor.
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
-        let mut hv =
-            hv::new(8, ram_size, vm_page_size, false).map_err(VmmError::SetupHypervisor)?;
+        let mut hv = hv::new(8, ram_size, debug).map_err(VmmError::SetupHypervisor)?;
 
         match profile.cpu_model {
             CpuModel::Host => (), // hv::new() already set to host by default.
@@ -186,18 +185,16 @@ impl Vmm<()> {
             CpuModel::ProWithHost => todo!(),
         }
 
-        let devices = Arc::new(setup_devices(ram_size.get(), hv.ram().block_size()));
+        let devices = Arc::new(setup_devices(ram_size.get(), vm_page_size));
 
         // Reserve the beginning of the memory for kernel use. On BIOS this area is used as an entry
         // point of the other CPU since it start in real-mode. In our case we don't actually need
         // this but the memory map in the kernel expect to have this area.
-        let host_page_size = hv.ram().host_page_size();
-        let block_size = hv.ram().block_size();
         let boot_len = 0xA0000usize
-            .next_multiple_of(block_size.get())
+            .next_multiple_of(vm_page_size.get())
             .try_into()
             .unwrap();
-        let mut ram = RamBuilder::new(&mut hv, 0);
+        let mut ram = RamBuilder::new(&mut hv, vm_page_size);
 
         ram.alloc(
             None,
@@ -205,20 +202,20 @@ impl Vmm<()> {
             #[cfg(target_arch = "aarch64")]
             self::arch::MEMORY_NORMAL,
         )
-        .map_err(VmmError::AllocBootMem)?;
+        .ok_or(VmmError::AllocBootMem)?;
 
         // TODO: Implement ASLR.
         let mut vaddr = 0xffffffff82200000;
         let phys_vaddr = 0xffffff0000000000;
         let kern_vaddr = vaddr;
-        let (kern_paddr, mut kern) = ram
+        let (kern_paddr, kern) = ram
             .alloc(
                 Some(kern_vaddr),
                 kern_len,
                 #[cfg(target_arch = "aarch64")]
                 self::arch::MEMORY_NORMAL,
             )
-            .map_err(VmmError::AllocKernel)?;
+            .ok_or(VmmError::AllocKernel)?;
 
         assert_eq!(kern_paddr, boot_len.get());
 
@@ -226,7 +223,7 @@ impl Vmm<()> {
             let mut src = img
                 .segment_data(hdr)
                 .map_err(|e| VmmError::SeekToOffset(hdr.p_offset, e))?;
-            let mut dst = kern.writer(hdr.p_vaddr, Some(hdr.p_memsz)).unwrap();
+            let mut dst = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
 
             match std::io::copy(&mut src, &mut dst) {
                 Ok(v) => {
@@ -238,8 +235,6 @@ impl Vmm<()> {
             }
         }
 
-        drop(kern);
-
         vaddr = vaddr
             .checked_add(kern_len.get())
             .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
@@ -248,15 +243,16 @@ impl Vmm<()> {
         // Allocate kernel map.
         let len = size_of::<KernelMap>().try_into().unwrap();
         let map_vaddr = vaddr;
-        let (_, mut map) = match ram.alloc(
-            Some(map_vaddr),
-            len,
-            #[cfg(target_arch = "aarch64")]
-            self::arch::MEMORY_NORMAL,
-        ) {
-            Ok(v) => v,
-            Err(e) => return Err(VmmError::AllocKernelMap(e)),
-        };
+        let (addr, map) = ram
+            .alloc(
+                Some(map_vaddr),
+                len,
+                #[cfg(target_arch = "aarch64")]
+                self::arch::MEMORY_NORMAL,
+            )
+            .ok_or(VmmError::AllocKernelMap)?;
+
+        assert_eq!(addr % align_of::<KernelMap>(), 0);
 
         vaddr = vaddr
             .checked_add(len.get())
@@ -266,15 +262,16 @@ impl Vmm<()> {
         // Allocate boot environment.
         let len = size_of::<BootEnv>().try_into().unwrap();
         let env_vaddr = vaddr;
-        let (_, env) = match ram.alloc(
-            Some(env_vaddr),
-            len,
-            #[cfg(target_arch = "aarch64")]
-            self::arch::MEMORY_NORMAL,
-        ) {
-            Ok(v) => v,
-            Err(e) => return Err(VmmError::AllocBootEnv(e)),
-        };
+        let (addr, env) = ram
+            .alloc(
+                Some(env_vaddr),
+                len,
+                #[cfg(target_arch = "aarch64")]
+                self::arch::MEMORY_NORMAL,
+            )
+            .ok_or(VmmError::AllocBootEnv)?;
+
+        assert_eq!(addr % align_of::<BootEnv>(), 0);
 
         vaddr = vaddr
             .checked_add(len.get())
@@ -292,8 +289,16 @@ impl Vmm<()> {
             #[cfg(target_arch = "aarch64")]
             self::arch::MEMORY_NORMAL,
         ) {
-            Ok((_, mut m)) => assert!(m.put(0, config.clone()).unwrap().is_none()),
-            Err(e) => return Err(VmmError::AllocKernelConfig(e)),
+            Some((a, m)) => {
+                assert_eq!(a % align_of_val(config), 0);
+
+                unsafe {
+                    m.as_mut_ptr()
+                        .cast::<Config>()
+                        .write_unaligned(config.clone())
+                };
+            }
+            None => return Err(VmmError::AllocKernelConfig),
         }
 
         vaddr = vaddr
@@ -303,7 +308,7 @@ impl Vmm<()> {
 
         // TODO: Allocate guard pages.
         let stack_len = (1024usize * 1024)
-            .next_multiple_of(block_size.get())
+            .next_multiple_of(vm_page_size.get())
             .try_into()
             .unwrap();
         let stack_vaddr = vaddr;
@@ -314,7 +319,7 @@ impl Vmm<()> {
             #[cfg(target_arch = "aarch64")]
             self::arch::MEMORY_NORMAL,
         )
-        .map_err(VmmError::AllocStack)?;
+        .ok_or(VmmError::AllocStack)?;
 
         vaddr = vaddr
             .checked_add(stack_len.get())
@@ -384,12 +389,11 @@ impl Vmm<()> {
 
         // Write boot environment.
         let reserved_end = ram.next_addr();
-        let mut mem = env;
+        let mem = env;
         let mut env = Vm {
             hypervisor,
             vmm: devices.vmm().addr(),
             console: devices.console().addr(),
-            host_page_size,
             memory_map: std::array::from_fn(|_| PhysMap {
                 base: 0,
                 len: 0,
@@ -410,9 +414,11 @@ impl Vmm<()> {
         env.memory_map[2].len = (ram_size.get() - reserved_end).try_into().unwrap();
         env.memory_map[2].ty = MapType::Ram;
 
-        assert!(mem.put(0, BootEnv::Vm(env)).unwrap().is_none());
-
-        drop(mem);
+        unsafe {
+            mem.as_mut_ptr()
+                .cast::<BootEnv>()
+                .write_unaligned(BootEnv::Vm(env))
+        };
 
         // Build page table.
         let page_table = ram
@@ -435,20 +441,15 @@ impl Vmm<()> {
             )
             .map_err(VmmError::BuildPageTable)?;
 
-        assert!(
-            map.put(
-                0,
-                KernelMap {
+        unsafe {
+            map.as_mut_ptr()
+                .cast::<KernelMap>()
+                .write_unaligned(KernelMap {
                     kern_vaddr,
                     kern_vsize: (vaddr - kern_vaddr).try_into().unwrap(),
                     phys_vaddr,
-                }
-            )
-            .unwrap()
-            .is_none()
-        );
-
-        drop(map);
+                })
+        };
 
         // Relocate kernel to virtual address.
         let map = RamMap {
@@ -472,6 +473,7 @@ impl Vmm<()> {
         let suspend = Arc::new(AtomicBool::new(debug));
         let args = CpuArgs {
             hv: hv.clone(),
+            vm_page_size,
             devices: devices.clone(),
             sender: cpu_sender,
             receiver: cpu_receiver,
@@ -516,9 +518,13 @@ impl Vmm<()> {
             return Err(VmmError::InvalidDynamicLinking);
         }
 
+        // SAFETY: We have an exclusive access to the hypervisor.
+        let kern = hv.ram().slice(map.kern_paddr, map.kern_len);
+
+        assert!(!kern.is_null());
+
         // Get PT_DYNAMIC.
-        let mut kern = hv.ram().lock(map.kern_paddr, map.kern_len).unwrap();
-        let kern = unsafe { kern.as_mut_slice() };
+        let kern = unsafe { std::slice::from_raw_parts_mut(kern, map.kern_len.get()) };
         let dynamic = p_vaddr
             .checked_add(p_memsz)
             .and_then(|end| kern.get(p_vaddr..end))
@@ -647,7 +653,7 @@ impl<H: Hypervisor> Vmm<H> {
             Err(e) => return Err(CpuError::Create(Box::new(e))),
         };
 
-        if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map) {
+        if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map, args.vm_page_size) {
             return Err(CpuError::Setup(Box::new(e)));
         }
 
@@ -833,6 +839,7 @@ struct Cpu {
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H> {
     hv: Arc<H>,
+    vm_page_size: NonZero<usize>,
     devices: Arc<DeviceTree>,
     sender: Sender<VmmEvent>,
     receiver: std::sync::mpsc::Receiver<VmmCommand>,
@@ -944,11 +951,11 @@ pub enum VmmError {
     #[error("couldn't set processor info")]
     SetProcessorInfo(#[source] HvError),
 
-    #[error("couldn't allocate RAM for boot memory")]
-    AllocBootMem(#[source] RamError),
+    #[error("not enough RAM for boot memory")]
+    AllocBootMem,
 
-    #[error("couldn't allocate RAM for the kernel")]
-    AllocKernel(#[source] RamError),
+    #[error("not enough RAM for the kernel")]
+    AllocKernel,
 
     #[error("couldn't seek to offset {0:#x}")]
     SeekToOffset(u64, #[source] std::io::Error),
@@ -959,17 +966,17 @@ pub enum VmmError {
     #[error("couldn't read kernel at offset {1}")]
     ReadKernel(#[source] std::io::Error, u64),
 
-    #[error("couldn't allocate RAM for kernel map")]
-    AllocKernelMap(#[source] RamError),
+    #[error("not enough RAM for kernel map")]
+    AllocKernelMap,
 
-    #[error("couldn't allocate RAM for boot environment")]
-    AllocBootEnv(#[source] RamError),
+    #[error("not enough RAM for boot environment")]
+    AllocBootEnv,
 
-    #[error("couldn't allocate RAM for kernel config")]
-    AllocKernelConfig(#[source] RamError),
+    #[error("not enough RAM for kernel config")]
+    AllocKernelConfig,
 
-    #[error("couldn't allocate RAM for stack")]
-    AllocStack(#[source] RamError),
+    #[error("not enough RAM for stack")]
+    AllocStack,
 
     #[error("couldn't build page table")]
     BuildPageTable(#[source] RamBuilderError),

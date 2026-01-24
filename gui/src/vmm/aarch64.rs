@@ -14,6 +14,7 @@ pub fn setup_main_cpu<H: Hypervisor>(
     cpu: &mut H::Cpu<'_>,
     entry: usize,
     map: RamMap,
+    page_size: NonZero<usize>,
 ) -> Result<(), MainCpuError> {
     let mut states = cpu
         .states()
@@ -45,7 +46,7 @@ pub fn setup_main_cpu<H: Hypervisor>(
     states.set_tcr(
         Tcr::new()
             .with_ips(hv.cpu_features().mmfr0.pa_range())
-            .with_tg1(match hv.ram().vm_page_size().get() {
+            .with_tg1(match page_size.get() {
                 0x4000 => 0b01, // 16K page for TTBR1_EL1.
                 _ => todo!(),
             })
@@ -53,7 +54,7 @@ pub fn setup_main_cpu<H: Hypervisor>(
             .with_orgn1(0b01)
             .with_irgn1(0b01)
             .with_t1sz(16)
-            .with_tg0(match hv.ram().vm_page_size().get() {
+            .with_tg0(match page_size.get() {
                 0x4000 => 0b10, // 16K page for TTBR0_EL1.
                 _ => todo!(),
             })

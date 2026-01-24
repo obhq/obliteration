@@ -1,8 +1,7 @@
 use super::{PhysMapping, RamBuilder};
-use crate::{Hypervisor, LockedMem, RamError};
+use crate::Hypervisor;
 use rustc_hash::FxHashMap;
 use std::num::NonZero;
-use std::ops::{Deref, DerefMut};
 use thiserror::Error;
 
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
@@ -17,10 +16,10 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         // Volume 2 for how paging work in long-mode.
         let (pml4t, page_table) = self
             .alloc_page_table()
-            .map_err(RamBuilderError::AllocPml4Table)?;
+            .ok_or(RamBuilderError::AllocPml4Table)?;
 
         // Setup page tables for allocated RAM.
-        let page_size = self.hv.ram().vm_page_size();
+        let page_size = self.vm_page_size;
         let mut cx = Context4K {
             pml4t,
             pdpt: FxHashMap::default(),
@@ -70,7 +69,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                 0 => {
                     let (pdpt, addr) = self
                         .alloc_page_table()
-                        .map_err(RamBuilderError::AllocPdpTable)?;
+                        .ok_or(RamBuilderError::AllocPdpTable)?;
 
                     Self::set_page_entry(&mut cx.pml4t[pml4o], addr);
 
@@ -88,7 +87,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                 0 => {
                     let (pdt, addr) = self
                         .alloc_page_table()
-                        .map_err(RamBuilderError::AllocPdTable)?;
+                        .ok_or(RamBuilderError::AllocPdTable)?;
 
                     Self::set_page_entry(&mut pdpt[pdpo], addr);
 
@@ -106,7 +105,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                 0 => {
                     let (pt, addr) = self
                         .alloc_page_table()
-                        .map_err(RamBuilderError::AllocPageTable)?;
+                        .ok_or(RamBuilderError::AllocPageTable)?;
 
                     Self::set_page_entry(&mut pdt[pdo], addr);
 
@@ -132,11 +131,11 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         Ok(())
     }
 
-    fn alloc_page_table(&mut self) -> Result<(PageTable<'a>, usize), RamError> {
+    fn alloc_page_table(&mut self) -> Option<(&'a mut [usize; 512], usize)> {
         // Get address and length.
         let addr = self.next;
         let len = (512usize * 8)
-            .checked_next_multiple_of(self.hv.ram().block_size().get())
+            .checked_next_multiple_of(self.vm_page_size.get())
             .and_then(NonZero::new)
             .unwrap();
 
@@ -144,13 +143,19 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         assert_eq!(addr % 4096, 0);
 
         // Allocate.
-        let mut tab = self.hv.ram().alloc(addr, len)?;
+        let tab = self.hv.ram().slice(addr, len);
 
-        tab.fill(0);
+        if tab.is_null() {
+            return None;
+        }
+
+        for i in 0..len.get() {
+            unsafe { tab.add(i).write(0) };
+        }
 
         self.next += len.get();
 
-        Ok((PageTable(tab), addr))
+        Some((unsafe { &mut *(tab as *mut [usize; 512]) }, addr))
     }
 
     fn set_page_entry(entry: &mut usize, addr: usize) {
@@ -165,43 +170,26 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
 
 /// Context to build 4K page tables.
 struct Context4K<'a> {
-    pml4t: PageTable<'a>,
-    pdpt: FxHashMap<usize, PageTable<'a>>,
-    pdt: FxHashMap<usize, PageTable<'a>>,
-    pt: FxHashMap<usize, PageTable<'a>>,
-}
-
-/// Encapsulates a [`LockedMem`] containing a page table.
-struct PageTable<'a>(LockedMem<'a>);
-
-impl Deref for PageTable<'_> {
-    type Target = [usize; 512];
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0.as_ptr().cast() }
-    }
-}
-
-impl DerefMut for PageTable<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.0.as_mut_ptr().cast() }
-    }
+    pml4t: &'a mut [usize; 512],
+    pdpt: FxHashMap<usize, &'a mut [usize; 512]>,
+    pdt: FxHashMap<usize, &'a mut [usize; 512]>,
+    pt: FxHashMap<usize, &'a mut [usize; 512]>,
 }
 
 /// Represents an error when [`RamBuilder::build_page_table()`] fails.
 #[derive(Debug, Error)]
 pub enum RamBuilderError {
-    #[error("couldn't allocate page-map level-4 table")]
-    AllocPml4Table(#[source] RamError),
+    #[error("not enough RAM for page-map level-4 table")]
+    AllocPml4Table,
 
-    #[error("couldn't allocate page-directory pointer table")]
-    AllocPdpTable(#[source] RamError),
+    #[error("not enough RAM for page-directory pointer table")]
+    AllocPdpTable,
 
-    #[error("couldn't allocate page-directory table")]
-    AllocPdTable(#[source] RamError),
+    #[error("not enough RAM for page-directory table")]
+    AllocPdTable,
 
-    #[error("couldn't allocate page table")]
-    AllocPageTable(#[source] RamError),
+    #[error("not enough RAM for page table")]
+    AllocPageTable,
 
     #[error("duplicated virtual address {0:#x}")]
     DuplicatedVirtualAddr(usize),
