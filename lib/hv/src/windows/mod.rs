@@ -26,12 +26,8 @@ pub fn new(
     part.setup().map_err(HvError::SetupPartitionFailed)?;
 
     // Map memory.
-    part.map_gpa(
-        ram.host_addr().cast(),
-        0,
-        ram.len().get().try_into().unwrap(),
-    )
-    .map_err(HvError::MapRamFailed)?;
+    part.map_gpa(ram.as_ptr().cast(), 0, ram.len().get().try_into().unwrap())
+        .map_err(HvError::MapRamFailed)?;
 
     Ok(Whp {
         part,
