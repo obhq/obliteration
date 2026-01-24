@@ -12,8 +12,6 @@ pub struct Vm {
     pub vmm: usize,
     /// Address of [ConsoleMemory].
     pub console: usize,
-    /// Page size on the host.
-    pub host_page_size: NonZero<usize>,
     /// Memory map. Set [PhysMap::ty] to [MapType::None](super::MapType::None) to mark the end of
     /// the list.
     pub memory_map: [PhysMap; 64],

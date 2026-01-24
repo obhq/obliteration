@@ -50,9 +50,15 @@ impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
             let len = self.msg_len.take().ok_or(ExecError::InvalidSequence)?;
             let data = read_ptr(exit, len, self.hv).map_err(|e| ExecError::ReadFailed(off, e))?;
 
-            self.msg.extend_from_slice(unsafe {
-                std::slice::from_raw_parts(data.as_ptr(), data.len().get())
-            });
+            self.msg.reserve(len.get());
+
+            // We can't make a slice from the pointer here since the data can be mutate by the VM,
+            // which will be a UB.
+            let dst = self.msg.spare_capacity_mut();
+
+            unsafe { data.copy_to_nonoverlapping(dst.as_mut_ptr().cast(), len.get()) };
+
+            unsafe { self.msg.set_len(self.msg.len() + len.get()) };
         } else if off == offset_of!(ConsoleMemory, commit) {
             // Check if state valid.
             if self.msg_len.is_some() || self.msg.is_empty() {

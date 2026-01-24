@@ -1,6 +1,5 @@
 use libc::{
-    _SC_PAGE_SIZE, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE,
-    mmap, mprotect, munmap, sysconf,
+    _SC_PAGE_SIZE, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap, munmap, sysconf,
 };
 use std::io::Error;
 use std::num::NonZero;
@@ -16,8 +15,8 @@ pub fn get_page_size() -> Result<NonZero<usize>, Error> {
     }
 }
 
-pub fn reserve(len: NonZero<usize>) -> Result<*mut u8, Error> {
-    let prot = PROT_NONE;
+pub fn alloc(len: NonZero<usize>) -> Result<*mut u8, Error> {
+    let prot = PROT_READ | PROT_WRITE;
     let flags = MAP_PRIVATE | MAP_ANON;
     let mem = unsafe { mmap(null_mut(), len.get(), prot, flags, -1, 0) };
 
@@ -30,27 +29,6 @@ pub fn reserve(len: NonZero<usize>) -> Result<*mut u8, Error> {
 
 pub unsafe fn free(addr: *const u8, len: NonZero<usize>) -> Result<(), Error> {
     if unsafe { munmap(addr.cast_mut().cast(), len.get()) } < 0 {
-        Err(Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-pub unsafe fn commit(addr: *const u8, len: NonZero<usize>) -> Result<(), Error> {
-    let addr = addr.cast_mut().cast();
-    let prot = PROT_READ | PROT_WRITE;
-    let flags = MAP_PRIVATE | MAP_ANON | MAP_FIXED;
-    let ptr = unsafe { mmap(addr, len.get(), prot, flags, -1, 0) };
-
-    if ptr == MAP_FAILED {
-        Err(Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-pub unsafe fn decommit(addr: *mut u8, len: usize) -> Result<(), Error> {
-    if unsafe { mprotect(addr.cast(), len, PROT_NONE) < 0 } {
         Err(Error::last_os_error())
     } else {
         Ok(())

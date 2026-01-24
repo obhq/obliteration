@@ -25,21 +25,14 @@ mod cpu;
 mod ffi;
 mod run;
 
-/// `page_size` is a page size on the VM. This value will be used as a block size if it is larger
-/// than page size on the host otherwise block size will be page size on the host.
-///
-/// `ram_size` must be multiply by the block size calculated from the above.
-///
-/// # Panics
-/// If `page_size` is not power of two.
+/// `ram_size` must be multiply by page size on the host.
 pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
-    page_size: NonZero<usize>,
     debug: bool,
 ) -> Result<impl HypervisorExt, HvError> {
     // Create RAM.
-    let ram = Ram::new(page_size, ram_size, ())?;
+    let ram = Ram::new(ram_size)?;
 
     // Open KVM device.
     let kvm = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
@@ -168,7 +161,7 @@ pub fn new(
         flags: 0,
         guest_phys_addr: 0,
         memory_size: ram.len().get().try_into().unwrap(),
-        userspace_addr: (ram.host_addr() as usize).try_into().unwrap(),
+        userspace_addr: (ram.as_ptr() as usize).try_into().unwrap(),
     };
 
     if unsafe { ioctl(vm.as_raw_fd(), KVM_SET_USER_MEMORY_REGION, &mr) } < 0 {

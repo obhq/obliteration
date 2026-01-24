@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub use self::arch::*;
 
-use super::{LockedMem, RamError};
 use crate::Hypervisor;
 use std::num::NonZero;
 
@@ -15,25 +14,24 @@ mod arch;
 /// the VM in a virtual address space from the beginning.
 pub struct RamBuilder<'a, H> {
     hv: &'a H,
+    vm_page_size: NonZero<usize>,
     next: usize,
     allocated: Vec<AllocInfo>,
 }
 
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
-    /// `start_addr` is a physical address to start allocate a block of memory, not a start address
-    /// of the RAM itself!
-    ///
     /// This function need a mutable borrow to the hypervisor to make sure no any vCPU is currently
     /// running.
     ///
     /// # Panics
-    /// If `start_addr` is not multiply by RAM block size.
-    pub fn new(hv: &'a mut H, start_addr: usize) -> Self {
-        assert_eq!(start_addr % hv.ram().block_size(), 0);
+    /// If `vm_page_size` is not power of two.
+    pub fn new(hv: &'a mut H, vm_page_size: NonZero<usize>) -> Self {
+        assert!(vm_page_size.is_power_of_two());
 
         Self {
             hv,
-            next: start_addr,
+            vm_page_size,
+            next: 0,
             allocated: Vec::new(),
         }
     }
@@ -42,14 +40,14 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         self.next
     }
 
-    /// Specify [`None`] for `vaddr` to use the same value as physical address (AKA identity
-    /// mapping).
+    /// Allocate a single VM page.
     ///
-    /// The first item in the returned tuple is physical address of the returned [`LockedMem`],
-    /// which always aligned to RAM block size. This imply the memory contained in the [`LockedMem`]
-    /// also aligned to RAM block size.
+    /// Specify [None] for `vaddr` to use the same value as physical address (AKA identity mapping).
     ///
-    /// Returns [`RamError::InvalidAddr`] if available space is not enough for `len`.
+    /// The first item in the returned tuple is a physical address of the returned slice, which
+    /// always aligned to VM page size.
+    ///
+    /// Returns [None] if available space is not enough for `len`.
     ///
     /// # Panics
     /// If `vaddr` is not multiply by VM page size.
@@ -58,7 +56,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         vaddr: Option<usize>,
         len: NonZero<usize>,
         #[cfg(target_arch = "aarch64")] attr: u8,
-    ) -> Result<(usize, LockedMem<'a>), RamError> {
+    ) -> Option<(usize, &'a mut [u8])> {
         // Build alloc info.
         let paddr = self.next;
         let vaddr = vaddr.unwrap_or(paddr);
@@ -70,28 +68,33 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             attr,
         };
 
-        assert_eq!(vaddr % self.hv.ram().vm_page_size(), 0);
+        assert_eq!(vaddr % self.vm_page_size, 0);
 
+        // Get size to allocate. We always round to VM page size
         // Alloc.
         let len = len
             .get()
-            .checked_next_multiple_of(self.hv.ram().block_size().get())
-            .ok_or(RamError::InvalidAddr)?;
+            .checked_next_multiple_of(self.vm_page_size.get())?;
         let len = unsafe { NonZero::new_unchecked(len) };
-        let mut mem = self.hv.ram().alloc(paddr, len)?;
+        let ptr = self.hv.ram().slice(paddr, len);
+
+        if ptr.is_null() {
+            return None;
+        }
 
         self.allocated.push(info);
         self.next += len.get();
 
         // Fill with zeroes. We need this in case of the previous RamBuilder fails and the user
         // construct a new one.
-        let ptr = mem.as_mut_ptr();
-
         for i in 0..len.get() {
             unsafe { ptr.add(i).write(0) };
         }
 
-        Ok((paddr, mem))
+        // Now it is safe to create a slice.
+        let mem = unsafe { std::slice::from_raw_parts_mut(ptr, len.get()) };
+
+        Some((paddr, mem))
     }
 
     /// # Panics
@@ -104,7 +107,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         phys_vaddr: usize,
         phys_addrs: impl IntoIterator<Item = PhysMapping>,
     ) -> Result<usize, RamBuilderError> {
-        match self.hv.ram().vm_page_size().get() {
+        match self.vm_page_size.get() {
             0x1000 => self.build_4k_page_tables(phys_vaddr, phys_addrs),
             #[cfg(target_arch = "aarch64")]
             0x4000 => self.build_16k_page_tables(phys_vaddr, phys_addrs),

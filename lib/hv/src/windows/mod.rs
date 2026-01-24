@@ -9,21 +9,14 @@ use windows_sys::core::HRESULT;
 mod cpu;
 mod partition;
 
-/// `page_size` is a page size on the VM. This value will be used as a block size if it is larger
-/// than page size on the host otherwise block size will be page size on the host.
-///
-/// `ram_size` must be multiply by the block size calculated from the above.
-///
-/// # Panics
-/// If `page_size` is not power of two.
+/// `ram_size` must be multiply by page size on the host.
 pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
-    page_size: NonZero<usize>,
     debug: bool,
 ) -> Result<impl HypervisorExt, HvError> {
     // Create RAM.
-    let ram = Ram::new(page_size, ram_size, ())?;
+    let ram = Ram::new(ram_size)?;
 
     // Setup a partition.
     let mut part = Partition::new().map_err(HvError::CreatePartitionFailed)?;
