@@ -13,7 +13,7 @@ end
 -- Setup list of packages to lint.
 local pkgs = {
   {name = 'bitflag', target = kt},
-  {name = 'config', target = kt},
+  {name = 'config', target = kt, feats = {'virt'}},
   {name = 'krt', target = kt},
   {name = 'macros'}
 }
@@ -35,6 +35,13 @@ for i = 1, #pkgs do
   if val then
     args[#args + 1] = '--target'
     args[#args + 1] = val
+  end
+
+  val = pkg.feats
+
+  if val then
+    args[#args + 1] = '--features'
+    args[#args + 1] = table.concat(val, ',')
   end
 
   args[#args + 1] = '--'

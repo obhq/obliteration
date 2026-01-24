@@ -1,7 +1,6 @@
 use super::{PhysMapping, RamBuilder};
 use crate::Hypervisor;
 use rustc_hash::FxHashMap;
-use std::mem::transmute;
 use std::num::NonZero;
 use thiserror::Error;
 
@@ -156,7 +155,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
 
         self.next += len.get();
 
-        Some((unsafe { transmute(tab) }, addr))
+        Some((unsafe { &mut *(tab as *mut [usize; 512]) }, addr))
     }
 
     fn set_page_entry(entry: &mut usize, addr: usize) {

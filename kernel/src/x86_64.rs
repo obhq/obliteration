@@ -173,8 +173,8 @@ pub unsafe fn setup_main_cpu(
     unsafe { wrmsr(0xC0000081, star) };
 
     // Set entry point for syscall instruction.
-    unsafe { wrmsr(0xC0000082, syscall_entry64 as usize) };
-    unsafe { wrmsr(0xC0000083, syscall_entry32 as usize) };
+    unsafe { wrmsr(0xC0000082, syscall_entry64 as *const () as usize) };
+    unsafe { wrmsr(0xC0000083, syscall_entry32 as *const () as usize) };
 
     // Set SFMASK for syscall.
     let mask = Rflags::new()
