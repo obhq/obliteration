@@ -473,6 +473,7 @@ impl Vmm<()> {
         let suspend = Arc::new(AtomicBool::new(debug));
         let args = CpuArgs {
             hv: hv.clone(),
+            vm_page_size,
             devices: devices.clone(),
             sender: cpu_sender,
             receiver: cpu_receiver,
@@ -652,7 +653,7 @@ impl<H: Hypervisor> Vmm<H> {
             Err(e) => return Err(CpuError::Create(Box::new(e))),
         };
 
-        if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map) {
+        if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map, args.vm_page_size) {
             return Err(CpuError::Setup(Box::new(e)));
         }
 
@@ -838,6 +839,7 @@ struct Cpu {
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H> {
     hv: Arc<H>,
+    vm_page_size: NonZero<usize>,
     devices: Arc<DeviceTree>,
     sender: Sender<VmmEvent>,
     receiver: std::sync::mpsc::Receiver<VmmCommand>,
