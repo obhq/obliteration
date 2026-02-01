@@ -327,8 +327,7 @@ impl Vm {
             }
 
             // Get buddy page index.
-            let i = (buddy_pa - start) >> PAGE_SHIFT;
-            let buddy = &self.pages[seg.first_page + usize::try_from(i).unwrap()];
+            let buddy = &self.pages[seg.first_page + ((buddy_pa - start) >> PAGE_SHIFT)];
             let mut bs = buddy.state.lock();
 
             if bs.order != order || buddy.vm != vm || ((page.unk1 ^ buddy.unk1) & 1) != 0 {
@@ -348,8 +347,7 @@ impl Vm {
 
             order += 1;
             pa &= !((1usize << (order + PAGE_SHIFT)) - 1);
-            page =
-                &self.pages[seg.first_page + usize::try_from((pa - start) >> PAGE_SHIFT).unwrap()];
+            page = &self.pages[seg.first_page + ((pa - start) >> PAGE_SHIFT)];
             ps = page.state.lock();
         }
 

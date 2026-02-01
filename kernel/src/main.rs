@@ -164,14 +164,13 @@ fn setup(
     let mut dump_avail = [0usize; 61];
     let mut da_indx = 1;
     let mut physmem = 0;
-    let page_size = PAGE_SIZE.get().try_into().unwrap();
     let unk1 = 0xA494000 + 0x2200000; // TODO: What is this?
     let paddr_free = match mi.unk {
         0 => map.kern_vsize.get() + 0x400000, // TODO: Why 0x400000?
         _ => map.kern_vsize.get(),
     };
 
-    mi.physmap[0] = page_size;
+    mi.physmap[0] = PAGE_SIZE.get();
 
     phys_avail[pa_indx] = mi.physmap[0];
     pa_indx += 1;
@@ -179,7 +178,9 @@ fn setup(
     dump_avail[da_indx] = mi.physmap[0];
 
     for i in (0..=mi.physmap_last).step_by(2) {
-        let begin = mi.physmap[i].checked_next_multiple_of(page_size).unwrap();
+        let begin = mi.physmap[i]
+            .checked_next_multiple_of(PAGE_SIZE.get())
+            .unwrap();
         let end = min(
             mi.physmap[i + 1] & !PAGE_MASK.get(),
             mi.end_page << PAGE_SHIFT,
@@ -195,7 +196,7 @@ fn setup(
             {
                 if mi.memtest == 0 {
                     if pa == phys_avail[pa_indx] {
-                        phys_avail[pa_indx] = pa + page_size;
+                        phys_avail[pa_indx] = pa + PAGE_SIZE.get();
                         physmem += 1;
                     } else {
                         let i = pa_indx + 1;
@@ -206,7 +207,7 @@ fn setup(
                         } else {
                             pa_indx += 2;
                             phys_avail[i] = pa;
-                            phys_avail[pa_indx] = pa + page_size;
+                            phys_avail[pa_indx] = pa + PAGE_SIZE.get();
                             physmem += 1;
                         }
                     }
@@ -216,10 +217,10 @@ fn setup(
             }
 
             if pa == dump_avail[da_indx] {
-                dump_avail[da_indx] = pa + page_size;
+                dump_avail[da_indx] = pa + PAGE_SIZE.get();
             } else if (da_indx + 1) != 60 {
                 dump_avail[da_indx + 1] = pa;
-                dump_avail[da_indx + 2] = pa + page_size;
+                dump_avail[da_indx + 2] = pa + PAGE_SIZE.get();
                 da_indx += 2;
             }
 
@@ -237,7 +238,7 @@ fn setup(
     let msgbuf_size = param1.msgbuf_size().next_multiple_of(PAGE_SIZE.get());
 
     #[allow(clippy::while_immutable_condition)] // TODO: Remove this once implement below todo.
-    while phys_avail[pa_indx] <= (phys_avail[pa_indx - 1] + page_size + msgbuf_size) {
+    while phys_avail[pa_indx] <= (phys_avail[pa_indx - 1] + PAGE_SIZE.get() + msgbuf_size) {
         todo!()
     }
 
@@ -376,7 +377,6 @@ fn load_memory_map() -> MemoryInfo {
     }
 
     // Get initial memory size and BIOS boot area.
-    let page_size = PAGE_SIZE.get().try_into().unwrap();
     let mut initial_memory_size = 0;
     let mut boot_area = None;
 
@@ -388,7 +388,7 @@ fn load_memory_map() -> MemoryInfo {
         }
 
         // Add to initial memory size.
-        let start = physmap[i].next_multiple_of(page_size);
+        let start = physmap[i].next_multiple_of(PAGE_SIZE.get());
         let end = physmap[i + 1] & !PAGE_MASK.get();
 
         initial_memory_size += end.saturating_sub(start);

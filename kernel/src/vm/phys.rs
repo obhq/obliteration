@@ -241,7 +241,7 @@ impl PhysAllocator {
                 segs.push(PhysSeg {
                     start,
                     end,
-                    first_page: first_page.try_into().unwrap(),
+                    first_page,
                     free_queues: queues[flind].clone(),
                 });
             }
