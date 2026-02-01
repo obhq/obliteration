@@ -11,14 +11,14 @@ use core::num::NonZero;
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
     vm: Arc<Vm>,
-    size: NonZero<usize>,  // uk_size
-    ipers: usize,          // uk_ipers
-    alloc: fn(&Vm, Alloc), // uk_allocf
-    max_pages: u32,        // uk_maxpages
-    pages: u32,            // uk_pages
-    free: u32,             // uk_free
-    recurse: u32,          // uk_recurse
-    flags: UmaFlags,       // uk_flags
+    size: NonZero<usize>,             // uk_size
+    ipers: usize,                     // uk_ipers
+    alloc: fn(&Vm, Alloc) -> *mut u8, // uk_allocf
+    max_pages: u32,                   // uk_maxpages
+    pages: u32,                       // uk_pages
+    free: u32,                        // uk_free
+    recurse: u32,                     // uk_recurse
+    flags: UmaFlags,                  // uk_flags
 }
 
 impl UmaKeg {
@@ -253,7 +253,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1402F0|
-    fn page_alloc(_: &Vm, _: Alloc) {
+    fn page_alloc(_: &Vm, _: Alloc) -> *mut u8 {
         todo!()
     }
 }

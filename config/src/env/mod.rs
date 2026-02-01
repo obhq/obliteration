@@ -8,8 +8,8 @@ mod vm;
 /// non-BIOS platform (e.g. UEFI) need to populate this struct from the other sources.
 #[repr(C)]
 pub struct PhysMap {
-    pub base: u64,
-    pub len: u64,
+    pub base: usize,
+    pub len: usize,
     pub ty: MapType,
     pub attrs: u32,
 }

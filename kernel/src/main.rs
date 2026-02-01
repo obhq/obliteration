@@ -104,7 +104,7 @@ fn setup(
     let mut mi = load_memory_map();
     let mut buf = String::with_capacity(0x2000);
 
-    fn format_map(tab: &[u64], last: usize, buf: &mut String) {
+    fn format_map(tab: &[usize], last: usize, buf: &mut String) {
         for i in (0..=last).step_by(2) {
             let start = tab[i];
             let end = tab[i + 1];
@@ -159,20 +159,18 @@ fn setup(
     drop(buf);
 
     // TODO: We probably want to remove hard-coded start address of the first map here.
-    let mut phys_avail = [0u64; 61];
+    let mut phys_avail = [0usize; 61];
     let mut pa_indx = 0;
-    let mut dump_avail = [0u64; 61];
+    let mut dump_avail = [0usize; 61];
     let mut da_indx = 1;
     let mut physmem = 0;
-    let page_size = PAGE_SIZE.get().try_into().unwrap();
-    let page_mask = u64::try_from(PAGE_MASK.get()).unwrap();
     let unk1 = 0xA494000 + 0x2200000; // TODO: What is this?
     let paddr_free = match mi.unk {
-        0 => u64::try_from(map.kern_vsize.get()).unwrap() + 0x400000, // TODO: Why 0x400000?
-        _ => map.kern_vsize.get().try_into().unwrap(),
+        0 => map.kern_vsize.get() + 0x400000, // TODO: Why 0x400000?
+        _ => map.kern_vsize.get(),
     };
 
-    mi.physmap[0] = page_size;
+    mi.physmap[0] = PAGE_SIZE.get();
 
     phys_avail[pa_indx] = mi.physmap[0];
     pa_indx += 1;
@@ -180,8 +178,13 @@ fn setup(
     dump_avail[da_indx] = mi.physmap[0];
 
     for i in (0..=mi.physmap_last).step_by(2) {
-        let begin = mi.physmap[i].checked_next_multiple_of(page_size).unwrap();
-        let end = min(mi.physmap[i + 1] & !page_mask, mi.end_page << PAGE_SHIFT);
+        let begin = mi.physmap[i]
+            .checked_next_multiple_of(PAGE_SIZE.get())
+            .unwrap();
+        let end = min(
+            mi.physmap[i + 1] & !PAGE_MASK.get(),
+            mi.end_page << PAGE_SHIFT,
+        );
 
         for pa in (begin..end).step_by(PAGE_SIZE.get()) {
             let mut full = false;
@@ -193,7 +196,7 @@ fn setup(
             {
                 if mi.memtest == 0 {
                     if pa == phys_avail[pa_indx] {
-                        phys_avail[pa_indx] = pa + page_size;
+                        phys_avail[pa_indx] = pa + PAGE_SIZE.get();
                         physmem += 1;
                     } else {
                         let i = pa_indx + 1;
@@ -204,7 +207,7 @@ fn setup(
                         } else {
                             pa_indx += 2;
                             phys_avail[i] = pa;
-                            phys_avail[pa_indx] = pa + page_size;
+                            phys_avail[pa_indx] = pa + PAGE_SIZE.get();
                             physmem += 1;
                         }
                     }
@@ -214,10 +217,10 @@ fn setup(
             }
 
             if pa == dump_avail[da_indx] {
-                dump_avail[da_indx] = pa + page_size;
+                dump_avail[da_indx] = pa + PAGE_SIZE.get();
             } else if (da_indx + 1) != 60 {
                 dump_avail[da_indx + 1] = pa;
-                dump_avail[da_indx + 2] = pa + page_size;
+                dump_avail[da_indx + 2] = pa + PAGE_SIZE.get();
                 da_indx += 2;
             }
 
@@ -232,14 +235,10 @@ fn setup(
     }
 
     // TODO: What is this?
-    let msgbuf_size: u64 = param1
-        .msgbuf_size()
-        .next_multiple_of(PAGE_SIZE.get())
-        .try_into()
-        .unwrap();
+    let msgbuf_size = param1.msgbuf_size().next_multiple_of(PAGE_SIZE.get());
 
     #[allow(clippy::while_immutable_condition)] // TODO: Remove this once implement below todo.
-    while phys_avail[pa_indx] <= (phys_avail[pa_indx - 1] + page_size + msgbuf_size) {
+    while phys_avail[pa_indx] <= (phys_avail[pa_indx - 1] + PAGE_SIZE.get() + msgbuf_size) {
         todo!()
     }
 
@@ -300,7 +299,7 @@ fn run(sr: SetupResult) -> ! {
 /// |PS4 11.00|0x25CF00|
 fn load_memory_map() -> MemoryInfo {
     // TODO: Some of the logic around here are very hard to understand.
-    let mut physmap = [0u64; 60];
+    let mut physmap = [0usize; 60];
     let mut last = 0usize;
     let memory_map = match boot_env() {
         BootEnv::Vm(v) => v.memory_map.as_slice(),
@@ -378,8 +377,6 @@ fn load_memory_map() -> MemoryInfo {
     }
 
     // Get initial memory size and BIOS boot area.
-    let page_size = PAGE_SIZE.get().try_into().unwrap();
-    let page_mask = !u64::try_from(PAGE_MASK.get()).unwrap();
     let mut initial_memory_size = 0;
     let mut boot_area = None;
 
@@ -391,8 +388,8 @@ fn load_memory_map() -> MemoryInfo {
         }
 
         // Add to initial memory size.
-        let start = physmap[i].next_multiple_of(page_size);
-        let end = physmap[i + 1] & page_mask;
+        let start = physmap[i].next_multiple_of(PAGE_SIZE.get());
+        let end = physmap[i + 1] & !PAGE_MASK.get();
 
         initial_memory_size += end.saturating_sub(start);
     }
@@ -414,7 +411,7 @@ fn load_memory_map() -> MemoryInfo {
     let config = config();
 
     if let Some(v) = config.env("hw.physmem") {
-        end_page = min(v.parse::<u64>().unwrap() >> PAGE_SHIFT, end_page);
+        end_page = min(v.parse::<usize>().unwrap() >> PAGE_SHIFT, end_page);
     }
 
     // Get memtest flags.
@@ -471,23 +468,21 @@ fn load_memory_map() -> MemoryInfo {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x1B9D20|
-fn adjust_boot_area(original: u64) -> BootInfo {
+fn adjust_boot_area(original: usize) -> BootInfo {
     // TODO: Most logic here does not make sense.
-    let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
-    let page_mask = !u64::try_from(PAGE_MASK.get()).unwrap();
-    let need = u64::try_from(arch().secondary_start.len()).unwrap();
-    let addr = (original * 1024) & page_mask;
+    let need = arch().secondary_start.len();
+    let addr = (original * 1024) & !PAGE_MASK.get();
 
     // TODO: What is this?
     let addr = if need <= ((original * 1024) & 0xC00) {
         addr
     } else {
-        addr - page_size
+        addr - PAGE_SIZE.get()
     };
 
     BootInfo {
         addr,
-        page_tables: addr - (page_size * 3),
+        page_tables: addr - (PAGE_SIZE.get() * 3),
     }
 }
 
@@ -497,7 +492,7 @@ fn adjust_boot_area(original: u64) -> BootInfo {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
-fn init_vm(phys_avail: [u64; 61], dmem: &Dmem) -> Arc<Uma> {
+fn init_vm(phys_avail: [usize; 61], dmem: &Dmem) -> Arc<Uma> {
     // TODO: Get ma from parse_srat.
     let vm = Vm::new(phys_avail, None, dmem).unwrap();
 
@@ -564,22 +559,22 @@ struct SetupResult {
 
 /// Contains memory information populated from memory map.
 struct MemoryInfo {
-    physmap: [u64; 60],
+    physmap: [usize; 60],
     physmap_last: usize,
-    boot_area: u64,
+    boot_area: usize,
     boot_info: BootInfo,
-    dcons_addr: u64,
-    dcons_size: u64,
-    initial_memory_size: u64,
-    end_page: u64,
+    dcons_addr: usize,
+    dcons_size: usize,
+    initial_memory_size: usize,
+    end_page: usize,
     unk: u32, // Seems like the only possible values are 0 - 3.
     memtest: u64,
 }
 
 /// Contains information for memory to boot a secondary CPU.
 struct BootInfo {
-    addr: u64,
-    page_tables: u64,
+    addr: usize,
+    page_tables: usize,
 }
 
 // SAFETY: PRIMITIVE_HEAP is a mutable static so it valid for reads and writes. This will be safe as
@@ -588,3 +583,8 @@ struct BootInfo {
 #[cfg_attr(target_os = "none", global_allocator)]
 static KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut PRIMITIVE_HEAP) };
 static mut PRIMITIVE_HEAP: [u8; 1024 * 1024 * 32] = [0; _];
+
+// We need virtual address space that large enough for all physical addresses to simplify the VM
+// system.
+#[cfg(not(target_pointer_width = "64"))]
+compile_error!("Obliteration can only be used with 64-bit CPU");

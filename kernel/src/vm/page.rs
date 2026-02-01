@@ -6,7 +6,7 @@ use macros::bitflag;
 pub struct VmPage {
     pub index: usize,
     pub vm: usize,
-    pub addr: u64,      // phys_addr
+    pub addr: usize,    // phys_addr
     pub segment: usize, // segind
     /// This **MUST** be locked after free queue.
     pub state: Mutex<PageState>,
@@ -16,7 +16,7 @@ pub struct VmPage {
 impl VmPage {
     pub const FREE_ORDER: usize = 13; // VM_NFREEORDER
 
-    pub fn new(index: usize, vm: usize, pool: usize, addr: u64, segment: usize) -> Self {
+    pub fn new(index: usize, vm: usize, pool: usize, addr: usize, segment: usize) -> Self {
         Self {
             index,
             vm,

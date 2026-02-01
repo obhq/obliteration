@@ -8,7 +8,7 @@ use core::num::NonZero;
 pub struct Dmem {
     mode: usize,
     config: &'static DmemConfig,
-    game_end: u64,
+    game_end: usize,
 }
 
 impl Dmem {
@@ -47,15 +47,15 @@ impl Dmem {
         if (0x7F393733u64 & (1 << mode)) != 0 {
             // Get alignment for mini-app DMEM.
             let align = if config().unknown_dmem1() == 0 {
-                0x8000000i64
+                0x8000000isize
             } else {
-                0x200000i64
+                0x200000isize
             };
 
             // Allocate mini-app DMEM.
             let size = dc.mini_size;
             let mini = match dc.mini_shared {
-                true => (-align) as u64 & (game_end - (dc.fmem_max.get() + size)),
+                true => (-align) as usize & (game_end - (dc.fmem_max.get() + size)),
                 false => todo!(),
             };
 
@@ -148,7 +148,7 @@ impl Dmem {
         self.config
     }
 
-    pub fn game_end(&self) -> u64 {
+    pub fn game_end(&self) -> usize {
         self.game_end
     }
 
@@ -156,13 +156,13 @@ impl Dmem {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x3F64C0|
-    fn reserve_phys(mi: &mut MemoryInfo, size: NonZero<u64>, align: i64) -> u64 {
+    fn reserve_phys(mi: &mut MemoryInfo, size: NonZero<usize>, align: isize) -> usize {
         let mut i = mi.physmap_last;
 
         loop {
             let start = mi.physmap[i];
             let end = mi.physmap[i + 1];
-            let addr = (end - size.get()) & ((-align) as u64);
+            let addr = (end - size.get()) & ((-align) as usize);
 
             if addr >= start {
                 let aligned_end = addr + size.get();
@@ -209,7 +209,7 @@ impl Dmem {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x3F65B0|
-    fn adjust_pmap(mi: &mut MemoryInfo, start: u64, end: u64) {
+    fn adjust_pmap(mi: &mut MemoryInfo, start: usize, end: usize) {
         // Orbis also check if physmap_last + 2 is less than one. We don't do this because it is
         // impossible for the value to be zero.
         let mut idx = 0;
@@ -298,12 +298,12 @@ impl Dmem {
 /// Configurations set for each DMEM mode.
 pub struct DmemConfig {
     pub name: &'static str,
-    pub game_size: NonZero<u64>,
-    pub fmem_max: NonZero<u64>,
-    pub mini_size: u64,
+    pub game_size: NonZero<usize>,
+    pub fmem_max: NonZero<usize>,
+    pub mini_size: usize,
     pub mini_shared: bool,
-    pub vsh_size: NonZero<u64>,
-    pub unk1: u64,
+    pub vsh_size: NonZero<usize>,
+    pub unk1: usize,
 }
 
 // TODO: It is likely to be more than 21 entries on PS4 11.00.

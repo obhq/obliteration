@@ -20,7 +20,7 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15F410|
-    pub fn new(phys_avail: &[u64; 61], ma: Option<&MemAffinity>) -> Self {
+    pub fn new(phys_avail: &[usize; 61], ma: Option<&MemAffinity>) -> Self {
         // Populate vm_phys_free_queues. Do not use Clone to construct the array here since it will
         // refer to the same object. The Orbis do this after segments creation but we do it before
         // instead.
@@ -85,7 +85,7 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15FC40|
-    pub fn segment_index(&self, pa: u64) -> Option<usize> {
+    pub fn segment_index(&self, pa: usize) -> Option<usize> {
         for (i, s) in self.segs.iter().enumerate() {
             if pa < s.start || pa >= s.end {
                 continue;
@@ -225,8 +225,8 @@ impl PhysAllocator {
         segs: &mut Vec<PhysSeg>,
         ma: Option<&MemAffinity>,
         queues: &[Arc<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>; 2],
-        start: u64,
-        end: u64,
+        start: usize,
+        end: usize,
         flind: usize,
     ) {
         match ma {
@@ -241,7 +241,7 @@ impl PhysAllocator {
                 segs.push(PhysSeg {
                     start,
                     end,
-                    first_page: first_page.try_into().unwrap(),
+                    first_page,
                     free_queues: queues[flind].clone(),
                 });
             }
@@ -251,8 +251,8 @@ impl PhysAllocator {
 
 /// Implementation of `vm_phys_seg` structure.
 pub struct PhysSeg {
-    pub start: u64,        // start
-    pub end: u64,          // end
+    pub start: usize,      // start
+    pub end: usize,        // end
     pub first_page: usize, // first_page
     pub free_queues: Arc<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>, // free_queues
 }

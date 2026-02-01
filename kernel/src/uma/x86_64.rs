@@ -1,6 +1,7 @@
 use super::Alloc;
 use crate::vm::{PageFlags, Vm};
 use core::sync::atomic::{AtomicUsize, Ordering};
+use krt::phys_vaddr;
 
 /// See `uma_small_alloc` on the Orbis for a reference.
 ///
@@ -8,7 +9,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x22FD70|
-pub fn small_alloc(vm: &Vm, flags: Alloc) {
+pub fn small_alloc(vm: &Vm, flags: Alloc) -> *mut u8 {
     // TODO: Figure out the name of this static variable. Also the Orbis does not use atomic
     // operation here.
     static UNK: AtomicUsize = AtomicUsize::new(0);
@@ -29,8 +30,9 @@ pub fn small_alloc(vm: &Vm, flags: Alloc) {
     let ps = page.state.lock();
 
     if flags.has_any(Alloc::Zero) && !ps.flags.has_any(PageFlags::Zero) {
-        todo!()
+        // SAFETY: The page just allocated so we have exclusive access.
+        unsafe { page.fill_with_zeros() };
     }
 
-    todo!()
+    (phys_vaddr() + page.addr) as *mut u8
 }
