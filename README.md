@@ -37,6 +37,7 @@ The reason it take so long is because we try to implement the kernel without stu
 
 - CPU with [SLAT](https://en.wikipedia.org/wiki/Second_Level_Address_Translation).
 - 16 GB of RAM.
+- 64-bit OS.
 
 ## Get a daily build
 

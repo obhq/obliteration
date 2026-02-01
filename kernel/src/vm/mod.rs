@@ -17,6 +17,9 @@ use krt::info;
 use macros::bitflag;
 use thiserror::Error;
 
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 mod object;
 mod page;
 mod phys;
@@ -39,7 +42,7 @@ impl Vm {
     /// |---------|--------|
     /// |PS4 11.00|0x029200|
     pub fn new(
-        phys_avail: [u64; 61],
+        phys_avail: [usize; 61],
         ma: Option<&MemAffinity>,
         dmem: &Dmem,
     ) -> Result<Arc<Self>, VmError> {
@@ -317,7 +320,7 @@ impl Vm {
 
         while order < 12 {
             let start = seg.start;
-            let buddy_pa = pa ^ (1u64 << (order + PAGE_SHIFT)); // TODO: What is this?
+            let buddy_pa = pa ^ (1usize << (order + PAGE_SHIFT)); // TODO: What is this?
 
             if buddy_pa < start || buddy_pa >= seg.end {
                 break;
@@ -344,7 +347,7 @@ impl Vm {
             drop(bs);
 
             order += 1;
-            pa &= !((1u64 << (order + PAGE_SHIFT)) - 1);
+            pa &= !((1usize << (order + PAGE_SHIFT)) - 1);
             page =
                 &self.pages[seg.first_page + usize::try_from((pa - start) >> PAGE_SHIFT).unwrap()];
             ps = page.state.lock();
