@@ -23,3 +23,12 @@ In order to build Obliteration from source make sure you have the following prer
   - `Desktop development with C++` workload is required
 - [Windows Terminal](https://aka.ms/terminal)
   - You can use a classic `Command Prompt` but make sure you enable [ANSI escape sequences](https://stackoverflow.com/q/16755142/1829232)
+
+## AArch64
+
+- Rust on the latest nightly channel
+  - You can install with `rustup toolchain install nightly`
+- Rust std source for nightly
+  - You can install with `rustup component add rust-src --toolchain nightly`
+- Rust `aarch64-unknown-none-softfloat` target
+  - You can install with `rustup target add aarch64-unknown-none-softfloat`
