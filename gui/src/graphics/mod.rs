@@ -28,7 +28,7 @@ pub trait GraphicsBuilder: 'static {
 
 /// Represents a graphics hardware.
 pub trait PhysicalDevice: Sized {
-    fn id(&self) -> &[u8];
+    fn id(&self) -> Vec<u8>;
     fn name(&self) -> &str;
 }
 

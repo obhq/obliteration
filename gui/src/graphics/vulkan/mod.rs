@@ -171,8 +171,8 @@ pub struct PhysicalDevice {
 }
 
 impl super::PhysicalDevice for PhysicalDevice {
-    fn id(&self) -> &[u8] {
-        &self.id
+    fn id(&self) -> Vec<u8> {
+        self.id.into()
     }
 
     fn name(&self) -> &str {

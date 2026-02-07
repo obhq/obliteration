@@ -43,8 +43,8 @@ impl GraphicsBuilder for MetalBuilder {
 }
 
 impl super::PhysicalDevice for metal::Device {
-    fn id(&self) -> &[u8] {
-        todo!()
+    fn id(&self) -> Vec<u8> {
+        self.deref().registry_id().to_ne_bytes().into()
     }
 
     fn name(&self) -> &str {
