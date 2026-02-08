@@ -6,12 +6,15 @@ use crate::vm::Vm;
 use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
+use core::mem::MaybeUninit;
 use core::num::NonZero;
 
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
     vm: Arc<Vm>,
     size: NonZero<usize>,             // uk_size
+    pgoff: usize,                     // uk_pgoff
+    ppera: usize,                     // uk_ppera
     ipers: usize,                     // uk_ipers
     alloc: fn(&Vm, Alloc) -> *mut u8, // uk_allocf
     max_pages: u32,                   // uk_maxpages
@@ -154,9 +157,13 @@ impl UmaKeg {
             todo!()
         }
 
+        // Get uk_pgoff.
+        let mut pgoff = 0;
+
         if !flags.has_any(UmaFlags::Offpage) {
             let space = ppera * PAGE_SIZE.get();
-            let pgoff = (space - hdr.size()) - ipers * free_item;
+
+            pgoff = (space - hdr.size()) - ipers * free_item;
 
             // TODO: What is this?
             if space < pgoff + hdr.size() + ipers * free_item {
@@ -173,6 +180,8 @@ impl UmaKeg {
         Self {
             vm,
             size,
+            pgoff,
+            ppera,
             ipers,
             alloc,
             max_pages: 0,
@@ -233,16 +242,46 @@ impl UmaKeg {
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
     fn alloc_slab(&self, flags: Alloc) {
+        let mut slab: *mut Slab<()>;
+
         if self.flags.has_any(UmaFlags::Offpage) {
             todo!()
         } else {
+            // Get allocation flags.
             let flags = if self.flags.has_any(UmaFlags::Malloc) {
                 flags & !Alloc::Zero
             } else {
                 flags | Alloc::Zero
             };
 
-            (self.alloc)(&self.vm, flags);
+            // Allocate.
+            slab = (self.alloc)(&self.vm, flags).cast();
+
+            if !slab.is_null() {
+                // The Orbis also check if uk_flags does not contains UMA_ZONE_OFFPAGE, which seems
+                // to be useless since we only be here when it does not contains UMA_ZONE_OFFPAGE.
+                slab = unsafe { slab.byte_add(self.pgoff) };
+
+                if self.flags.has_any(UmaFlags::VToSlab) && self.ppera != 0 {
+                    todo!()
+                }
+
+                if self.flags.has_any(UmaFlags::RefCnt) {
+                    todo!()
+                } else if self.ipers == 0 {
+                    todo!()
+                } else {
+                    let slab = core::ptr::slice_from_raw_parts_mut(slab, self.ipers);
+                    let slab = slab as *mut Slab<[MaybeUninit<Free>]>;
+
+                    for (i, f) in unsafe { (*slab).free.iter_mut().enumerate() } {
+                        f.write(Free {
+                            item: (i + 1).try_into().unwrap(),
+                        });
+                    }
+                }
+            }
+
             todo!()
         }
     }
