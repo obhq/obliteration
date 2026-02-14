@@ -119,22 +119,25 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             "?" => state.parse_stop_reason(res, self.handler).await,
             // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "p" | data => state.parse_read_register(data, res, self.handler).await,
-            // I think this does not worth for additional complexity on our side so we don't support
+            // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qC-packet
+            "qC" => state.parse_current_thread(res),            // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
             "QEnableErrorStrings" => Ok(()),
-            // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qC-packet
-            "qC" => state.parse_current_thread(res),
-            // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
-            "qHostInfo" => state.parse_host_info(res),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qfThreadInfo-packet
             "qfThreadInfo" => state.parse_first_thread_info(res, self.handler),
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
+            "qHostInfo" => state.parse_host_info(res),
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
+            "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(res),
+            // The VMM already relocated the kernel.
+            "qOffsets" => Ok(()),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qregisterinfo-hex-reg-id
             "qRegisterInfo" | reg => state.parse_register_info(reg, res),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qsThreadInfo-packet
             "qsThreadInfo" => state.parse_subsequent_thread_info(res),
-            // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
-            "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(res),
+            // TODO: What is this?
+            "qStructuredDataPlugins" => Ok(()),
             // This does not useful to us. See
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qprocessinfo for more details.
             "qProcessInfo" => Ok(()),
