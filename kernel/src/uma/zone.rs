@@ -53,6 +53,7 @@ impl UmaZone {
         keg: Option<UmaKeg>,
         size: NonZero<usize>,
         align: Option<usize>,
+        init: Option<fn()>,
         flags: impl Into<UmaFlags>,
     ) -> Self {
         let name = name.into();
@@ -65,7 +66,7 @@ impl UmaZone {
             // keg from masterzone_k.
             let keg = match keg {
                 Some(v) => v,
-                None => UmaKeg::new(vm, size, align.unwrap_or(Self::ALIGN_CACHE), flags),
+                None => UmaKeg::new(vm, size, align.unwrap_or(Self::ALIGN_CACHE), init, flags),
             };
 
             (keg, UmaFlags::zeroed())

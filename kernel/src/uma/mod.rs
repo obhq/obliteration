@@ -72,6 +72,7 @@ impl Uma {
                 None,
                 layout.size().try_into().unwrap(),
                 Some(layout.align() - 1),
+                None,
                 UmaFlags::Bucket | UmaFlags::Internal,
             ));
 
@@ -100,6 +101,7 @@ impl Uma {
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,
+        init: Option<fn()>,
         flags: impl Into<UmaFlags>,
     ) -> UmaZone {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
@@ -113,6 +115,7 @@ impl Uma {
             None,
             size,
             align,
+            init,
             flags,
         )
     }
