@@ -17,9 +17,10 @@ pub struct UmaKeg {
     ppera: usize,                     // uk_ppera
     ipers: usize,                     // uk_ipers
     alloc: fn(&Vm, Alloc) -> *mut u8, // uk_allocf
-    max_pages: u32,                   // uk_maxpages
-    pages: u32,                       // uk_pages
-    free: u32,                        // uk_free
+    init: Option<fn()>,               // uk_init
+    max_pages: usize,                 // uk_maxpages
+    pages: usize,                     // uk_pages
+    free: usize,                      // uk_free
     recurse: u32,                     // uk_recurse
     flags: UmaFlags,                  // uk_flags
 }
@@ -38,6 +39,7 @@ impl UmaKeg {
         vm: Arc<Vm>,
         size: NonZero<usize>,
         align: usize,
+        init: Option<fn()>,
         mut flags: UmaFlags,
     ) -> Self {
         if flags.has_any(UmaFlags::Vm) {
@@ -123,14 +125,20 @@ impl UmaKeg {
                 };
 
                 // Get uk_ipers.
-                let ipers = available / (rsize + free_item);
+                let mut ipers = available / (rsize + free_item);
 
                 // TODO: Verify if this valid for PAGE_SIZE < 0x4000.
                 if !flags.has_any(UmaFlags::Internal | UmaFlags::CacheOnly)
                     && (available % (rsize + free_item)) >= Uma::MAX_WASTE.get()
                     && (PAGE_SIZE.get() / rsize) > ipers
                 {
-                    todo!()
+                    ipers = PAGE_SIZE.get() / rsize;
+
+                    if flags.has_any(UmaFlags::VToSlab) {
+                        flags |= UmaFlags::Offpage;
+                    } else {
+                        flags |= UmaFlags::Offpage | UmaFlags::Hash;
+                    }
                 }
 
                 (1, ipers)
@@ -184,6 +192,7 @@ impl UmaKeg {
             ppera,
             ipers,
             alloc,
+            init,
             max_pages: 0,
             pages: 0,
             free: 0,
@@ -241,7 +250,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
-    fn alloc_slab(&self, flags: Alloc) {
+    fn alloc_slab(&mut self, flags: Alloc) -> *mut Slab<()> {
         let mut slab: *mut Slab<()>;
 
         if self.flags.has_any(UmaFlags::Offpage) {
@@ -266,6 +275,7 @@ impl UmaKeg {
                     todo!()
                 }
 
+                // TODO: Populate slab.
                 if self.flags.has_any(UmaFlags::RefCnt) {
                     todo!()
                 } else if self.ipers == 0 {
@@ -282,7 +292,18 @@ impl UmaKeg {
                 }
             }
 
-            todo!()
+            if self.init.is_some() {
+                todo!()
+            }
+
+            if self.flags.has_any(UmaFlags::Hash) {
+                todo!()
+            }
+
+            self.pages += self.ppera;
+            self.free += self.ipers;
+
+            slab
         }
     }
 
