@@ -290,20 +290,22 @@ impl UmaKeg {
                         });
                     }
                 }
+
+                if self.init.is_some() {
+                    todo!()
+                }
+
+                if self.flags.has_any(UmaFlags::Hash) {
+                    todo!()
+                }
+
+                self.pages += self.ppera;
+                self.free += self.ipers;
+
+                return slab;
             }
 
-            if self.init.is_some() {
-                todo!()
-            }
-
-            if self.flags.has_any(UmaFlags::Hash) {
-                todo!()
-            }
-
-            self.pages += self.ppera;
-            self.free += self.ipers;
-
-            slab
+            todo!()
         }
     }
 
