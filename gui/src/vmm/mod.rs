@@ -800,6 +800,16 @@ impl<H: Hypervisor> Vmm<H> {
 
                     tx.send(VmmEvent::RaxValue(v));
                 }
+                #[cfg(target_arch = "x86_64")]
+                VmmCommand::ReadRip => {
+                    let v = cpu
+                        .states()
+                        .map_err(|e| CpuError::GetStates(Box::new(e)))?
+                        .get_rip()
+                        .map_err(|e| CpuError::ReadReg("rip", Box::new(e)))?;
+
+                    tx.send(VmmEvent::RipValue(v));
+                }
                 VmmCommand::TranslateAddress(addr) => match cpu.translate(addr) {
                     Ok(v) => tx.send(VmmEvent::TranslatedAddress(v)),
                     Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
@@ -865,6 +875,8 @@ struct RamMap {
 pub enum VmmCommand {
     #[cfg(target_arch = "x86_64")]
     ReadRax,
+    #[cfg(target_arch = "x86_64")]
+    ReadRip,
     TranslateAddress(usize),
     Release,
 }
@@ -875,6 +887,8 @@ pub enum VmmEvent {
     Breakpoint(Option<DebugEvent>),
     #[cfg(target_arch = "x86_64")]
     RaxValue(usize),
+    #[cfg(target_arch = "x86_64")]
+    RipValue(usize),
     TranslatedAddress(usize),
 }
 
