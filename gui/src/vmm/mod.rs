@@ -800,6 +800,7 @@ impl<H: Hypervisor> Vmm<H> {
 
                     tx.send(VmmEvent::RaxValue(v));
                 }
+                #[cfg(target_arch = "x86_64")]
                 VmmCommand::ReadRip => {
                     let v = cpu
                         .states()
