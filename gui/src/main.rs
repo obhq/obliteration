@@ -893,6 +893,8 @@ impl<H: Hypervisor> Context<H> {
             VmmEvent::Breakpoint(e) => self.pending_bps.push((cpu, e)),
             #[cfg(target_arch = "x86_64")]
             VmmEvent::RaxValue(v) => self.registers.rax = Some(v),
+            #[cfg(target_arch = "x86_64")]
+            VmmEvent::RipValue(v) => self.registers.rip = Some(v),
             VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
@@ -951,6 +953,25 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
             self.read_vmm().await?;
         }
     }
+
+    #[cfg(target_arch = "x86_64")]
+    async fn read_rip(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>> {
+        // Send VMM request.
+        let cpu = td.get() - 1;
+
+        if self.vmm.send(cpu, VmmCommand::ReadRip).is_some() {
+            return Err(format!("invalid thread-id '{td}'").into());
+        }
+
+        // Wait for the value.
+        loop {
+            if let Some(v) = self.registers.rip.take() {
+                break Ok(v);
+            }
+
+            self.read_vmm().await?;
+        }
+    }
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -961,6 +982,7 @@ struct RegisterValues {}
 #[derive(Default)]
 struct RegisterValues {
     rax: Option<usize>,
+    rip: Option<usize>,
 }
 
 /// Program arguments parsed from command line.

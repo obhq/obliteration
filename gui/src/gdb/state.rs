@@ -301,7 +301,7 @@ impl SessionState {
             Register::R13 => todo!(),
             Register::R14 => todo!(),
             Register::R15 => todo!(),
-            Register::Rip => todo!(),
+            Register::Rip => h.read_rip(td).await?.to_ne_bytes().encode_hex(),
             Register::Rflags => todo!(),
         };
 
