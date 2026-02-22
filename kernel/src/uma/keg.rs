@@ -3,26 +3,29 @@ use super::slab::{Free, RcFree, Slab};
 use super::{Alloc, Uma, UmaFlags, UmaZone};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::vm::Vm;
+use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::mem::MaybeUninit;
 use core::num::NonZero;
+use core::ptr::NonNull;
 
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
     vm: Arc<Vm>,
-    size: NonZero<usize>,             // uk_size
-    pgoff: usize,                     // uk_pgoff
-    ppera: usize,                     // uk_ppera
-    ipers: usize,                     // uk_ipers
-    alloc: fn(&Vm, Alloc) -> *mut u8, // uk_allocf
-    init: Option<fn()>,               // uk_init
-    max_pages: usize,                 // uk_maxpages
-    pages: usize,                     // uk_pages
-    free: usize,                      // uk_free
-    recurse: u32,                     // uk_recurse
-    flags: UmaFlags,                  // uk_flags
+    size: NonZero<usize>,                       // uk_size
+    pgoff: usize,                               // uk_pgoff
+    ppera: usize,                               // uk_ppera
+    ipers: usize,                               // uk_ipers
+    alloc: fn(&Vm, Alloc) -> *mut u8,           // uk_allocf
+    init: Option<fn()>,                         // uk_init
+    max_pages: usize,                           // uk_maxpages
+    pages: usize,                               // uk_pages
+    free: usize,                                // uk_free
+    recurse: u32,                               // uk_recurse
+    partial_slabs: VecDeque<NonNull<Slab<()>>>, // uk_part_slab
+    flags: UmaFlags,                            // uk_flags
 }
 
 impl UmaKeg {
@@ -197,6 +200,7 @@ impl UmaKeg {
             pages: 0,
             free: 0,
             recurse: 0,
+            partial_slabs: VecDeque::new(),
             flags,
         }
     }
@@ -223,7 +227,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141E20|
-    pub fn fetch_slab(&mut self, _: &UmaZone, flags: Alloc) -> Option<()> {
+    pub fn fetch_slab(&mut self, _: &UmaZone, mut flags: Alloc) -> Option<NonNull<Slab<()>>> {
         while self.free == 0 {
             if flags.has_any(Alloc::NoVm) {
                 return None;
@@ -235,10 +239,15 @@ impl UmaKeg {
             }
 
             self.recurse += 1;
-            self.alloc_slab(flags);
+            let slab = self.alloc_slab(flags);
             self.recurse -= 1;
 
-            todo!()
+            if let Some(slab) = NonNull::new(slab) {
+                self.partial_slabs.push_front(slab);
+                return Some(slab);
+            }
+
+            flags |= Alloc::NoVm;
         }
 
         todo!()

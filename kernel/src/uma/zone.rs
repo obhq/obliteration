@@ -1,5 +1,6 @@
 use super::bucket::{BucketItem, UmaBucket};
 use super::keg::UmaKeg;
+use super::slab::Slab;
 use super::{Alloc, Uma, UmaBox, UmaFlags};
 use crate::context::{CpuLocal, current_thread};
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
@@ -13,7 +14,7 @@ use core::cell::RefCell;
 use core::cmp::min;
 use core::num::NonZero;
 use core::ops::DerefMut;
-use core::ptr::null_mut;
+use core::ptr::{NonNull, null_mut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Implementation of `uma_zone` structure.
@@ -22,16 +23,16 @@ pub struct UmaZone {
     bucket_keys: Arc<Vec<usize>>,
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
-    size: NonZero<usize>,                                           // uz_size
-    kegs: Gutex<LinkedList<UmaKeg>>,                                // uz_kegs + uz_klink
-    slab: fn(&Self, Option<&mut UmaKeg>, Alloc) -> Option<()>,      // uz_slab
-    caches: CpuLocal<RefCell<UmaCache>>,                            // uz_cpu
+    size: NonZero<usize>,            // uz_size
+    kegs: Gutex<LinkedList<UmaKeg>>, // uz_kegs + uz_klink
+    slab: fn(&Self, Option<&mut UmaKeg>, Alloc) -> Option<NonNull<Slab<()>>>, // uz_slab
+    caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
     full_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_full_bucket
     free_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_free_bucket
-    alloc_count: Gutex<u64>,                                        // uz_allocs
-    free_count: Gutex<u64>,                                         // uz_frees
-    count: Gutex<usize>,                                            // uz_count
-    flags: UmaFlags,                                                // uz_flags
+    alloc_count: Gutex<u64>,         // uz_allocs
+    free_count: Gutex<u64>,          // uz_frees
+    count: Gutex<usize>,             // uz_count
+    flags: UmaFlags,                 // uz_flags
 }
 
 impl UmaZone {
@@ -315,7 +316,7 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    fn fetch_slab(&self, keg: Option<&mut UmaKeg>, flags: Alloc) -> Option<()> {
+    fn fetch_slab(&self, keg: Option<&mut UmaKeg>, flags: Alloc) -> Option<NonNull<Slab<()>>> {
         let mut kegs = self.kegs.write();
         let keg = keg.unwrap_or(kegs.front_mut().unwrap());
 
