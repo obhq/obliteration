@@ -328,3 +328,6 @@ impl UmaKeg {
         todo!()
     }
 }
+
+unsafe impl Send for UmaKeg {}
+unsafe impl Sync for UmaKeg {}
