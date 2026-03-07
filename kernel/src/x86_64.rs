@@ -41,7 +41,7 @@ pub fn identify_cpu() -> CpuInfo {
 
     // Get cpu_high.
     let mut cpu_vendor = String::with_capacity(128);
-    let r = unsafe { core::arch::x86_64::__cpuid(0) };
+    let r = core::arch::x86_64::__cpuid(0);
     let cpu_high = r.eax;
     let mut buf = [0u8; 12];
 
@@ -54,7 +54,7 @@ pub fn identify_cpu() -> CpuInfo {
     write!(cpu_vendor, "{}", core::str::from_utf8(&buf).unwrap()).unwrap();
 
     // TODO: Get cpu_vendor_id.
-    let r = unsafe { core::arch::x86_64::__cpuid(1) };
+    let r = core::arch::x86_64::__cpuid(1);
     let cpu_id = r.eax;
 
     // TODO: Get cpu_feature.
