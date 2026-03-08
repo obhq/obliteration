@@ -3,7 +3,7 @@ use super::keg::UmaKeg;
 use super::slab::Slab;
 use super::{Alloc, Uma, UmaBox, UmaFlags};
 use crate::context::{CpuLocal, current_thread};
-use crate::lock::{Gutex, GutexGroup, GutexWrite};
+use crate::lock::{Mutex, MutexGuard};
 use crate::vm::Vm;
 use alloc::collections::VecDeque;
 use alloc::collections::linked_list::LinkedList;
@@ -23,16 +23,11 @@ pub struct UmaZone {
     bucket_keys: Arc<Vec<usize>>,
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
-    size: NonZero<usize>,            // uz_size
-    kegs: Gutex<LinkedList<UmaKeg>>, // uz_kegs + uz_klink
+    size: NonZero<usize>, // uz_size
     slab: fn(&Self, Option<&mut UmaKeg>, Alloc) -> Option<NonNull<Slab<()>>>, // uz_slab
     caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
-    full_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_full_bucket
-    free_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_free_bucket
-    alloc_count: Gutex<u64>,         // uz_allocs
-    free_count: Gutex<u64>,          // uz_frees
-    count: Gutex<usize>,             // uz_count
-    flags: UmaFlags,                 // uz_flags
+    flags: UmaFlags,      // uz_flags
+    state: Mutex<ZoneState>,
 }
 
 impl UmaZone {
@@ -110,7 +105,6 @@ impl UmaZone {
         }
 
         // Construct uma_zone.
-        let gg = GutexGroup::new();
         let inherit = UmaFlags::Offpage
             | UmaFlags::Malloc
             | UmaFlags::Hash
@@ -128,15 +122,17 @@ impl UmaZone {
             bucket_zones,
             ty,
             size: keg.size(),
-            kegs: gg.clone().spawn(LinkedList::from([keg])),
             slab: Self::fetch_slab,
             caches: CpuLocal::new(|_| RefCell::default()),
-            full_buckets: gg.clone().spawn_default(),
-            free_buckets: gg.clone().spawn_default(),
-            alloc_count: gg.clone().spawn_default(),
-            free_count: gg.clone().spawn_default(),
-            count: gg.spawn(count),
             flags,
+            state: Mutex::new(ZoneState {
+                kegs: LinkedList::from([keg]),
+                full_buckets: VecDeque::default(),
+                free_buckets: VecDeque::default(),
+                alloc_count: 0,
+                free_count: 0,
+                count,
+            }),
         }
     }
 
@@ -173,8 +169,7 @@ impl UmaZone {
 
             // Cache not found, allocate from the zone. We need to re-check the cache again because
             // we may on a different CPU since we drop the CPU pinning on the above.
-            let mut frees = self.free_buckets.write();
-            let mut count = self.count.write();
+            let mut state = self.state.lock();
             let caches = self.caches.lock();
             let mut cache = caches.borrow_mut();
             let mem = Self::alloc_from_cache(&mut cache);
@@ -184,14 +179,14 @@ impl UmaZone {
             }
 
             // TODO: What actually we are doing here?
-            *self.alloc_count.write() += core::mem::take(&mut cache.allocs);
-            *self.free_count.write() += core::mem::take(&mut cache.frees);
+            state.alloc_count += core::mem::take(&mut cache.allocs);
+            state.free_count += core::mem::take(&mut cache.frees);
 
             if let Some(b) = cache.alloc.take() {
-                frees.push_front(b);
+                state.free_buckets.push_front(b);
             }
 
-            if let Some(b) = self.full_buckets.write().pop_front() {
+            if let Some(b) = state.full_buckets.pop_front() {
                 cache.alloc = Some(b);
 
                 // Seems like this should never fail.
@@ -228,12 +223,12 @@ impl UmaZone {
                     | ZoneType::MbufJumboPage
                     | ZoneType::MbufPacket
                     | ZoneType::MbufClusterPack
-            ) && *count < Uma::BUCKET_MAX
+            ) && state.count < Uma::BUCKET_MAX
             {
-                *count += 1;
+                state.count += 1;
             }
 
-            if self.alloc_bucket(frees, count, flags) {
+            if self.alloc_bucket(state, flags) {
                 return self.alloc_item(flags);
             }
         }
@@ -262,13 +257,8 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
-    fn alloc_bucket(
-        &self,
-        frees: GutexWrite<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>,
-        count: GutexWrite<usize>,
-        flags: Alloc,
-    ) -> bool {
-        match frees.front() {
+    fn alloc_bucket(&self, state: MutexGuard<ZoneState>, flags: Alloc) -> bool {
+        match state.free_buckets.front() {
             Some(_) => todo!(),
             None => {
                 if self.bucket_enable.load(Ordering::Relaxed) {
@@ -280,7 +270,7 @@ impl UmaZone {
                     }
 
                     // Alloc a bucket.
-                    let i = (*count + 15) >> Uma::BUCKET_SHIFT;
+                    let i = (state.count + 15) >> Uma::BUCKET_SHIFT;
                     let k = self.bucket_keys[i];
 
                     self.bucket_zones[k].alloc_item(flags);
@@ -317,8 +307,8 @@ impl UmaZone {
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
     fn fetch_slab(&self, keg: Option<&mut UmaKeg>, flags: Alloc) -> Option<NonNull<Slab<()>>> {
-        let mut kegs = self.kegs.write();
-        let keg = keg.unwrap_or(kegs.front_mut().unwrap());
+        let mut state = self.state.lock();
+        let keg = keg.unwrap_or(state.kegs.front_mut().unwrap());
 
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
@@ -334,6 +324,16 @@ impl UmaZone {
 
         None
     }
+}
+
+/// Contains mutable data for [UmaZone].
+struct ZoneState {
+    kegs: LinkedList<UmaKeg>, // uz_kegs + uz_klink
+    full_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_full_bucket
+    free_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_free_bucket
+    alloc_count: u64,         // uz_allocs
+    free_count: u64,          // uz_frees
+    count: usize,             // uz_count
 }
 
 /// Type of [`UmaZone`].
