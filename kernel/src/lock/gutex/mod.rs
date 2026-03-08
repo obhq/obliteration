@@ -97,12 +97,6 @@ impl GutexGroup {
     }
 
     /// # Context safety
-    /// This function does not require a CPU context if [`Default`] implementation on `T` does not.
-    pub fn spawn_default<T: Default>(self: Arc<Self>) -> Gutex<T> {
-        self.spawn(T::default())
-    }
-
-    /// # Context safety
     /// This function does not require a CPU context.
     pub fn spawn<T>(self: Arc<Self>, value: T) -> Gutex<T> {
         Gutex {
