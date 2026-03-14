@@ -292,7 +292,7 @@ impl SessionState {
             Register::Rsi => todo!(),
             Register::Rdi => todo!(),
             Register::Rbp => todo!(),
-            Register::Rsp => todo!(),
+            Register::Rsp => h.read_rsp(td).await?.to_ne_bytes().encode_hex(),
             Register::R8 => todo!(),
             Register::R9 => todo!(),
             Register::R10 => todo!(),

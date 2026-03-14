@@ -857,6 +857,29 @@ struct Context<H> {
 }
 
 impl<H: Hypervisor> Context<H> {
+    async fn read_reg<T>(
+        &mut self,
+        td: NonZero<usize>,
+        cmd: VmmCommand,
+        mut f: impl FnMut(&mut RegisterValues) -> &mut Option<T>,
+    ) -> Result<T, Box<dyn std::error::Error>> {
+        // Send VMM request.
+        let cpu = td.get() - 1;
+
+        if self.vmm.send(cpu, cmd).is_some() {
+            return Err(format!("invalid thread-id '{td}'").into());
+        }
+
+        // Wait for the value.
+        loop {
+            if let Some(v) = f(&mut self.registers).take() {
+                break Ok(v);
+            }
+
+            self.read_vmm().await?;
+        }
+    }
+
     async fn read_vmm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (id, ev) = self.vmm.recv().await;
 
@@ -895,6 +918,8 @@ impl<H: Hypervisor> Context<H> {
             VmmEvent::RaxValue(v) => self.registers.rax = Some(v),
             #[cfg(target_arch = "x86_64")]
             VmmEvent::RipValue(v) => self.registers.rip = Some(v),
+            #[cfg(target_arch = "x86_64")]
+            VmmEvent::RspValue(v) => self.registers.rsp = Some(v),
             VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
@@ -936,41 +961,27 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
     }
 
     #[cfg(target_arch = "x86_64")]
-    async fn read_rax(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>> {
-        // Send VMM request.
-        let cpu = td.get() - 1;
-
-        if self.vmm.send(cpu, VmmCommand::ReadRax).is_some() {
-            return Err(format!("invalid thread-id '{td}'").into());
-        }
-
-        // Wait for the value.
-        loop {
-            if let Some(v) = self.registers.rax.take() {
-                break Ok(v);
-            }
-
-            self.read_vmm().await?;
-        }
+    fn read_rax(
+        &mut self,
+        td: NonZero<usize>,
+    ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
+        self.read_reg(td, VmmCommand::ReadRax, |v| &mut v.rax)
     }
 
     #[cfg(target_arch = "x86_64")]
-    async fn read_rip(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>> {
-        // Send VMM request.
-        let cpu = td.get() - 1;
+    fn read_rip(
+        &mut self,
+        td: NonZero<usize>,
+    ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
+        self.read_reg(td, VmmCommand::ReadRip, |v| &mut v.rip)
+    }
 
-        if self.vmm.send(cpu, VmmCommand::ReadRip).is_some() {
-            return Err(format!("invalid thread-id '{td}'").into());
-        }
-
-        // Wait for the value.
-        loop {
-            if let Some(v) = self.registers.rip.take() {
-                break Ok(v);
-            }
-
-            self.read_vmm().await?;
-        }
+    #[cfg(target_arch = "x86_64")]
+    fn read_rsp(
+        &mut self,
+        td: NonZero<usize>,
+    ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
+        self.read_reg(td, VmmCommand::ReadRsp, |v| &mut v.rsp)
     }
 }
 
@@ -983,6 +994,7 @@ struct RegisterValues {}
 struct RegisterValues {
     rax: Option<usize>,
     rip: Option<usize>,
+    rsp: Option<usize>,
 }
 
 /// Program arguments parsed from command line.
