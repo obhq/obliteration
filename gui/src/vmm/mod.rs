@@ -789,27 +789,25 @@ impl<H: Hypervisor> Vmm<H> {
                 },
             };
 
+            macro_rules! get_rex {
+                ($name:literal, $method:ident, $value:ident) => {{
+                    let v = cpu
+                        .states()
+                        .map_err(|e| CpuError::GetStates(Box::new(e)))?
+                        .$method()
+                        .map_err(|e| CpuError::ReadReg($name, Box::new(e)))?;
+
+                    tx.send(VmmEvent::$value(v));
+                }};
+            }
+
             match cmd {
                 #[cfg(target_arch = "x86_64")]
-                VmmCommand::ReadRax => {
-                    let v = cpu
-                        .states()
-                        .map_err(|e| CpuError::GetStates(Box::new(e)))?
-                        .get_rax()
-                        .map_err(|e| CpuError::ReadReg("rax", Box::new(e)))?;
-
-                    tx.send(VmmEvent::RaxValue(v));
-                }
+                VmmCommand::ReadRax => get_rex!("rax", get_rax, RaxValue),
                 #[cfg(target_arch = "x86_64")]
-                VmmCommand::ReadRip => {
-                    let v = cpu
-                        .states()
-                        .map_err(|e| CpuError::GetStates(Box::new(e)))?
-                        .get_rip()
-                        .map_err(|e| CpuError::ReadReg("rip", Box::new(e)))?;
-
-                    tx.send(VmmEvent::RipValue(v));
-                }
+                VmmCommand::ReadRip => get_rex!("rip", get_rip, RipValue),
+                #[cfg(target_arch = "x86_64")]
+                VmmCommand::ReadRsp => get_rex!("rsp", get_rsp, RspValue),
                 VmmCommand::TranslateAddress(addr) => match cpu.translate(addr) {
                     Ok(v) => tx.send(VmmEvent::TranslatedAddress(v)),
                     Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
@@ -877,6 +875,8 @@ pub enum VmmCommand {
     ReadRax,
     #[cfg(target_arch = "x86_64")]
     ReadRip,
+    #[cfg(target_arch = "x86_64")]
+    ReadRsp,
     TranslateAddress(usize),
     Release,
 }
@@ -889,6 +889,8 @@ pub enum VmmEvent {
     RaxValue(usize),
     #[cfg(target_arch = "x86_64")]
     RipValue(usize),
+    #[cfg(target_arch = "x86_64")]
+    RspValue(usize),
     TranslatedAddress(usize),
 }
 

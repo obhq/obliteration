@@ -8,4 +8,6 @@ pub trait GdbHandler {
     async fn read_rax(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>>;
     #[cfg(target_arch = "x86_64")]
     async fn read_rip(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>>;
+    #[cfg(target_arch = "x86_64")]
+    async fn read_rsp(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>>;
 }
