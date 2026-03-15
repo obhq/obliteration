@@ -24,7 +24,7 @@ pub struct UmaZone {
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
     size: NonZero<usize>, // uz_size
-    slab: fn(&Self, Option<&mut UmaKeg>, Alloc) -> Option<NonNull<Slab<()>>>, // uz_slab
+    slab: fn(&Self, Option<&Arc<UmaKeg>>, Alloc) -> Option<NonNull<Slab<()>>>, // uz_slab
     caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
     flags: UmaFlags,      // uz_flags
     state: Mutex<ZoneState>,
@@ -126,7 +126,7 @@ impl UmaZone {
             caches: CpuLocal::new(|_| RefCell::default()),
             flags,
             state: Mutex::new(ZoneState {
-                kegs: LinkedList::from([keg]),
+                kegs: LinkedList::from([Arc::new(keg)]),
                 full_buckets: VecDeque::default(),
                 free_buckets: VecDeque::default(),
                 alloc_count: 0,
@@ -293,7 +293,9 @@ impl UmaZone {
         // Get a slab.
         let slab = (self.slab)(self, None, flags);
 
-        if slab.is_some() {
+        if let Some(mut slab) = slab {
+            unsafe { slab.as_mut().alloc_item() };
+
             todo!()
         }
 
@@ -306,13 +308,13 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    fn fetch_slab(&self, keg: Option<&mut UmaKeg>, flags: Alloc) -> Option<NonNull<Slab<()>>> {
-        let mut state = self.state.lock();
-        let keg = keg.unwrap_or(state.kegs.front_mut().unwrap());
+    fn fetch_slab(&self, keg: Option<&Arc<UmaKeg>>, flags: Alloc) -> Option<NonNull<Slab<()>>> {
+        let state = self.state.lock();
+        let keg = keg.unwrap_or(state.kegs.front().unwrap());
 
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
-                if let Some(v) = keg.fetch_slab(self, flags) {
+                if let Some(v) = keg.fetch_slab(flags) {
                     return Some(v);
                 }
 
@@ -328,12 +330,12 @@ impl UmaZone {
 
 /// Contains mutable data for [UmaZone].
 struct ZoneState {
-    kegs: LinkedList<UmaKeg>, // uz_kegs + uz_klink
+    kegs: LinkedList<Arc<UmaKeg>>, // uz_kegs + uz_klink
     full_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_full_bucket
     free_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_free_bucket
-    alloc_count: u64,         // uz_allocs
-    free_count: u64,          // uz_frees
-    count: usize,             // uz_count
+    alloc_count: u64,              // uz_allocs
+    free_count: u64,               // uz_frees
+    count: usize,                  // uz_count
 }
 
 /// Type of [`UmaZone`].
