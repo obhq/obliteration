@@ -6,6 +6,18 @@ pub struct Slab<I: ?Sized> {
     pub free: I, // us_freelist
 }
 
+impl<I: ?Sized> Slab<I> {
+    /// See `slab_alloc_item` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x141FE0|
+    pub fn alloc_item(&mut self) {
+        todo!()
+    }
+}
+
 /// Item in the slab to represents `uma_slab` structure.
 #[repr(C)]
 pub struct Free {
