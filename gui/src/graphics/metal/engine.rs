@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::GraphicsError;
 use crate::graphics::Graphics;
 use metal::{Device, MetalLayer};
-use thiserror::Error;
 
 /// Implementation of [`Graphics`] using Metal.
 ///
@@ -11,11 +11,11 @@ pub struct Metal {
 }
 
 impl Metal {
-    pub fn new() -> Result<Self, MetalError> {
+    pub fn new() -> Result<Self, GraphicsError> {
         // Get Metal device.
         let device = match Device::system_default() {
             Some(v) => v,
-            None => return Err(MetalError::GetDeviceFailed),
+            None => return Err(GraphicsError::GetDeviceFailed),
         };
 
         Ok(Self { device })
@@ -32,10 +32,3 @@ impl Metal {
 }
 
 impl Graphics for Metal {}
-
-/// Represents an error when [`Metal::new()`] fails.
-#[derive(Debug, Error)]
-pub enum MetalError {
-    #[error("couldn't get default MTLDevice")]
-    GetDeviceFailed,
-}
