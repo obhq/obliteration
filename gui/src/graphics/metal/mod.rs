@@ -38,7 +38,7 @@ impl GraphicsBuilder for MetalBuilder {
         screen: WindowAttributes,
         shutdown: &Arc<AtomicBool>,
     ) -> Result<Arc<Self::Engine>, GraphicsError> {
-        todo!()
+        Metal::new().map(Arc::new)
     }
 }
 
@@ -54,4 +54,7 @@ impl super::PhysicalDevice for metal::Device {
 
 /// Represents an error when operation on Metal fails.
 #[derive(Debug, Error)]
-pub enum GraphicsError {}
+pub enum GraphicsError {
+    #[error("couldn't get default MTLDevice")]
+    GetDeviceFailed,
+}
