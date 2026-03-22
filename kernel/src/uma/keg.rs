@@ -336,3 +336,5 @@ struct KegState<T> {
     free: usize,                               // uk_free
     partial_slabs: VecDeque<NonNull<Slab<T>>>, // uk_part_slab
 }
+
+unsafe impl<T: Send> Send for KegState<T> {}
