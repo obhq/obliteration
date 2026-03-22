@@ -1,7 +1,5 @@
 use super::bucket::{BucketItem, UmaBucket};
-use super::keg::UmaKeg;
-use super::slab::Slab;
-use super::{Alloc, Uma, UmaBox, UmaFlags};
+use super::{Alloc, FreeItem, Slab, StdFree, Uma, UmaBox, UmaFlags, UmaKeg};
 use crate::context::{CpuLocal, current_thread};
 use crate::lock::{Mutex, MutexGuard};
 use crate::vm::Vm;
@@ -18,19 +16,19 @@ use core::ptr::{NonNull, null_mut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Implementation of `uma_zone` structure.
-pub struct UmaZone {
+pub struct UmaZone<T> {
     bucket_enable: Arc<AtomicBool>,
     bucket_keys: Arc<Vec<usize>>,
-    bucket_zones: Arc<Vec<UmaZone>>,
+    bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
     ty: ZoneType,
     size: NonZero<usize>, // uz_size
-    slab: fn(&Self, Option<&Arc<UmaKeg>>, Alloc) -> Option<NonNull<Slab<()>>>, // uz_slab
+    slab: fn(&Self, Option<&Arc<UmaKeg<T>>>, Alloc) -> Option<NonNull<Slab<T>>>, // uz_slab
     caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
     flags: UmaFlags,      // uz_flags
-    state: Mutex<ZoneState>,
+    state: Mutex<ZoneState<T>>,
 }
 
-impl UmaZone {
+impl<T: FreeItem> UmaZone<T> {
     const ALIGN_CACHE: usize = 63; // uma_align_cache
 
     /// See `zone_ctor` on Orbis for a reference.
@@ -44,9 +42,9 @@ impl UmaZone {
         vm: Arc<Vm>,
         bucket_enable: Arc<AtomicBool>,
         bucket_keys: Arc<Vec<usize>>,
-        bucket_zones: Arc<Vec<UmaZone>>,
+        bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
         name: impl Into<String>,
-        keg: Option<UmaKeg>,
+        keg: Option<UmaKeg<T>>,
         size: NonZero<usize>,
         align: Option<usize>,
         init: Option<fn()>,
@@ -108,7 +106,6 @@ impl UmaZone {
         let inherit = UmaFlags::Offpage
             | UmaFlags::Malloc
             | UmaFlags::Hash
-            | UmaFlags::RefCnt
             | UmaFlags::VToSlab
             | UmaFlags::Bucket
             | UmaFlags::Internal
@@ -135,7 +132,9 @@ impl UmaZone {
             }),
         }
     }
+}
 
+impl<T> UmaZone<T> {
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
@@ -257,7 +256,7 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
-    fn alloc_bucket(&self, state: MutexGuard<ZoneState>, flags: Alloc) -> bool {
+    fn alloc_bucket(&self, state: MutexGuard<ZoneState<T>>, flags: Alloc) -> bool {
         match state.free_buckets.front() {
             Some(_) => todo!(),
             None => {
@@ -301,14 +300,16 @@ impl UmaZone {
 
         todo!()
     }
+}
 
+impl<T: FreeItem> UmaZone<T> {
     /// See `zone_fetch_slab` on the Orbis for a reference.
     ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    fn fetch_slab(&self, keg: Option<&Arc<UmaKeg>>, flags: Alloc) -> Option<NonNull<Slab<()>>> {
+    fn fetch_slab(&self, keg: Option<&Arc<UmaKeg<T>>>, flags: Alloc) -> Option<NonNull<Slab<T>>> {
         let state = self.state.lock();
         let keg = keg.unwrap_or(state.kegs.front().unwrap());
 
@@ -329,13 +330,13 @@ impl UmaZone {
 }
 
 /// Contains mutable data for [UmaZone].
-struct ZoneState {
-    kegs: LinkedList<Arc<UmaKeg>>, // uz_kegs + uz_klink
+struct ZoneState<T> {
+    kegs: LinkedList<Arc<UmaKeg<T>>>, // uz_kegs + uz_klink
     full_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_full_bucket
     free_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_free_bucket
-    alloc_count: u64,              // uz_allocs
-    free_count: u64,               // uz_frees
-    count: usize,                  // uz_count
+    alloc_count: u64,                 // uz_allocs
+    free_count: u64,                  // uz_frees
+    count: usize,                     // uz_count
 }
 
 /// Type of [`UmaZone`].

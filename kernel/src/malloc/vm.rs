@@ -1,6 +1,6 @@
 use crate::config::PAGE_SIZE;
 use crate::context::{CpuLocal, current_thread, uma};
-use crate::uma::{Alloc, UmaFlags, UmaZone};
+use crate::uma::{Alloc, StdFree, UmaFlags, UmaZone};
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -11,8 +11,8 @@ use core::num::NonZero;
 /// Kernel heap that allocate a memory from a virtual memory management system. This struct is a
 /// merge of `malloc_type` and `malloc_type_internal` structure.
 pub struct VmHeap {
-    zones: [Vec<Arc<UmaZone>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
-    stats: CpuLocal<RefCell<Stats>>,                        // mti_stats
+    zones: [Vec<Arc<UmaZone<StdFree>>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
+    stats: CpuLocal<RefCell<Stats>>,                                 // mti_stats
 }
 
 impl VmHeap {
