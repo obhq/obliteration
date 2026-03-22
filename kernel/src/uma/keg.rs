@@ -1,6 +1,5 @@
 use super::arch::small_alloc;
-use super::slab::{Free, RcFree, Slab};
-use super::{Alloc, Uma, UmaFlags};
+use super::{Alloc, FreeItem, Slab, SlabHdr, Uma, UmaFlags};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::lock::Mutex;
 use crate::vm::Vm;
@@ -8,13 +7,12 @@ use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
-use core::mem::MaybeUninit;
 use core::num::NonZero;
-use core::ptr::NonNull;
+use core::ptr::{NonNull, addr_of_mut};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Implementation of `uma_keg` structure.
-pub struct UmaKeg {
+pub struct UmaKeg<T> {
     vm: Arc<Vm>,
     size: NonZero<usize>,             // uk_size
     pgoff: usize,                     // uk_pgoff
@@ -25,10 +23,10 @@ pub struct UmaKeg {
     max_pages: usize,                 // uk_maxpages
     recurse: AtomicU32,               // uk_recurse
     flags: UmaFlags,                  // uk_flags
-    state: Mutex<KegState>,
+    state: Mutex<KegState<T>>,
 }
 
-impl UmaKeg {
+impl<T: FreeItem> UmaKeg<T> {
     /// `align` is the actual alignment **minus** one, which mean if you want each item to be 8
     /// bytes alignment this value will be 7.
     ///
@@ -53,17 +51,15 @@ impl UmaKeg {
             todo!()
         }
 
-        if flags.has_any(UmaFlags::Malloc | UmaFlags::RefCnt) {
+        if flags.has_any(UmaFlags::Malloc) {
             flags |= UmaFlags::VToSlab;
         }
 
+        flags |= T::flags();
+
         // Get header layout.
-        let hdr = Layout::new::<Slab<()>>();
-        let (mut hdr, off) = if flags.has_any(UmaFlags::RefCnt) {
-            hdr.extend(Layout::new::<RcFree>()).unwrap()
-        } else {
-            hdr.extend(Layout::new::<Free>()).unwrap()
-        };
+        let hdr = Layout::new::<SlabHdr<T>>();
+        let (mut hdr, off) = hdr.extend(Layout::new::<T>()).unwrap();
 
         hdr = hdr.pad_to_align();
 
@@ -149,11 +145,7 @@ impl UmaKeg {
         };
 
         if flags.has_any(UmaFlags::Offpage) {
-            if flags.has_any(UmaFlags::RefCnt) {
-                // TODO: Set uk_slabzone to slabrefzone.
-            } else {
-                // TODO: Set uk_slabzone to slabzone.
-            }
+            // TODO: Set uk_slabzone.
         }
 
         // Get allocator.
@@ -174,6 +166,7 @@ impl UmaKeg {
         if !flags.has_any(UmaFlags::Offpage) {
             let space = ppera * PAGE_SIZE.get();
 
+            // TODO: This can cause a pointer to slab unaligned.
             pgoff = (space - hdr.size()) - ipers * free_item;
 
             // TODO: What is this?
@@ -206,7 +199,9 @@ impl UmaKeg {
             }),
         }
     }
+}
 
+impl<T> UmaKeg<T> {
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
@@ -223,6 +218,18 @@ impl UmaKeg {
         self.flags
     }
 
+    /// See `page_alloc` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1402F0|
+    fn page_alloc(_: &Vm, _: Alloc) -> *mut u8 {
+        todo!()
+    }
+}
+
+impl<T: FreeItem> UmaKeg<T> {
     /// Unlike Orbis, our slab contains a strong reference to its keg. That mean all allocated slabs
     /// need to free manually otherwise the keg will be leak.
     ///
@@ -232,7 +239,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141E20|
-    pub fn fetch_slab(self: &Arc<Self>, mut flags: Alloc) -> Option<NonNull<Slab<()>>> {
+    pub fn fetch_slab(self: &Arc<Self>, mut flags: Alloc) -> Option<NonNull<Slab<T>>> {
         let mut state = self.state.lock();
 
         while state.free == 0 {
@@ -266,9 +273,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
-    fn alloc_slab(self: &Arc<Self>, state: &mut KegState, flags: Alloc) -> *mut Slab<()> {
-        let mut slab: *mut Slab<()>;
-
+    fn alloc_slab(self: &Arc<Self>, state: &mut KegState<T>, flags: Alloc) -> *mut Slab<T> {
         if self.flags.has_any(UmaFlags::Offpage) {
             todo!()
         } else {
@@ -280,31 +285,30 @@ impl UmaKeg {
             };
 
             // Allocate.
-            slab = (self.alloc)(&self.vm, flags).cast();
+            let mem = (self.alloc)(&self.vm, flags);
 
-            if !slab.is_null() {
+            if !mem.is_null() {
                 // The Orbis also check if uk_flags does not contains UMA_ZONE_OFFPAGE, which seems
                 // to be useless since we only be here when it does not contains UMA_ZONE_OFFPAGE.
-                slab = unsafe { slab.byte_add(self.pgoff) };
+                let hdr = unsafe { mem.byte_add(self.pgoff).cast::<SlabHdr<T>>() };
 
                 if self.flags.has_any(UmaFlags::VToSlab) && self.ppera != 0 {
                     todo!()
                 }
 
-                // TODO: Populate slab.
-                if self.flags.has_any(UmaFlags::RefCnt) {
-                    todo!()
-                } else if self.ipers == 0 {
-                    todo!()
-                } else {
-                    let slab = core::ptr::slice_from_raw_parts_mut(slab, self.ipers);
-                    let slab = slab as *mut Slab<[MaybeUninit<Free>]>;
+                // TODO: Populate remaining fields.
+                unsafe { addr_of_mut!((*hdr).keg).write(self.clone()) };
 
-                    for (i, f) in unsafe { (*slab).free.iter_mut().enumerate() } {
-                        f.write(Free {
-                            item: (i + 1).try_into().unwrap(),
-                        });
-                    }
+                // Initialize free items. The offset calculation here should be optimized away.
+                let (_, off) = Layout::new::<SlabHdr<T>>()
+                    .extend(Layout::new::<T>())
+                    .unwrap();
+                let free = unsafe { hdr.byte_add(off).cast::<T>() };
+
+                for i in 0..self.ipers {
+                    let item = T::new(i);
+
+                    unsafe { free.add(i).write(item) };
                 }
 
                 if self.init.is_some() {
@@ -318,30 +322,17 @@ impl UmaKeg {
                 state.pages += self.ppera;
                 state.free += self.ipers;
 
-                return slab;
+                return core::ptr::slice_from_raw_parts_mut(hdr, self.ipers) as *mut Slab<T>;
             }
 
             todo!()
         }
     }
-
-    /// See `page_alloc` on the Orbis for a reference.
-    ///
-    /// # Reference offsets
-    /// | Version | Offset |
-    /// |---------|--------|
-    /// |PS4 11.00|0x1402F0|
-    fn page_alloc(_: &Vm, _: Alloc) -> *mut u8 {
-        todo!()
-    }
 }
 
-unsafe impl Send for UmaKeg {}
-unsafe impl Sync for UmaKeg {}
-
 /// Mutable state of [UmaKeg].
-struct KegState {
-    pages: usize,                               // uk_pages
-    free: usize,                                // uk_free
-    partial_slabs: VecDeque<NonNull<Slab<()>>>, // uk_part_slab
+struct KegState<T> {
+    pages: usize,                              // uk_pages
+    free: usize,                               // uk_free
+    partial_slabs: VecDeque<NonNull<Slab<T>>>, // uk_part_slab
 }

@@ -1,5 +1,9 @@
 pub use self::boxed::*;
+pub use self::slab::StdFree;
 pub use self::zone::*;
+
+pub(self) use self::keg::*;
+pub(self) use self::slab::{FreeItem, Slab, SlabHdr};
 
 use self::bucket::{BucketItem, UmaBucket};
 use crate::config::PAGE_SIZE;
@@ -26,8 +30,8 @@ mod zone;
 pub struct Uma {
     vm: Arc<Vm>,
     bucket_enable: Arc<AtomicBool>,
-    bucket_keys: Arc<Vec<usize>>,    // bucket_size
-    bucket_zones: Arc<Vec<UmaZone>>, // bucket_zones
+    bucket_keys: Arc<Vec<usize>>,             // bucket_size
+    bucket_zones: Arc<Vec<UmaZone<StdFree>>>, // bucket_zones
 }
 
 impl Uma {
@@ -96,14 +100,14 @@ impl Uma {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DC80|
-    pub fn create_zone(
+    pub fn create_zone<T: FreeItem>(
         &self,
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,
         init: Option<fn()>,
         flags: impl Into<UmaFlags>,
-    ) -> UmaZone {
+    ) -> UmaZone<T> {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
         // does not idomatic to Rust, which mean our uma_zone itself can live on the stack.
         UmaZone::new(
@@ -138,8 +142,6 @@ pub enum UmaFlags {
     Hash = 0x100,
     /// `UMA_ZONE_SECONDARY`.
     Secondary = 0x200,
-    /// `UMA_ZONE_REFCNT`.
-    RefCnt = 0x400,
     /// `UMA_ZONE_MAXBUCKET`.
     MaxBucket = 0x800,
     /// `UMA_ZONE_CACHESPREAD`.
