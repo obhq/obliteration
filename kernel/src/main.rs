@@ -1,5 +1,6 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
+#![allow(clippy::needless_pub_self)] // rust-analyzer will use full path without pub(self).
 #![allow(clippy::type_complexity)] // Type aliasing hide the actual type.
 
 use self::config::{Config, Dipsw, PAGE_MASK, PAGE_SHIFT, PAGE_SIZE, Param1};
