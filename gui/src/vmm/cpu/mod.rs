@@ -3,7 +3,6 @@ use crate::hw::DeviceContext;
 use hv::Cpu;
 use std::collections::BTreeMap;
 use std::num::NonZero;
-use thiserror::Error;
 
 /// Contains instantiated device context for a CPU.
 pub struct Device<'a, C: Cpu> {
@@ -27,14 +26,4 @@ impl<'a, C: Cpu> Device<'a, C> {
 
         assert!(tree.insert(addr, dev).is_none());
     }
-}
-
-/// Implementation of [`gdbstub::target::Target::Error`].
-#[derive(Debug, Error)]
-pub enum GdbError {
-    #[error("the main CPU exited")]
-    MainCpuExited,
-
-    #[error("CPU not found")]
-    CpuNotFound,
 }
