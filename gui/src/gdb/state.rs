@@ -4,8 +4,8 @@ use std::io::Write;
 use std::num::NonZero;
 
 /// Contains states for a GDB remote session.
-#[derive(Default)]
 pub struct SessionState {
+    current_thread: NonZero<usize>,
     no_ack: Option<bool>,
     thread_suffix_supported: bool,
     threads_in_stop_reply: bool,
@@ -143,9 +143,10 @@ impl SessionState {
 
     pub fn parse_current_thread(
         &mut self,
-        _: &mut Vec<u8>,
+        res: &mut Vec<u8>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Return empty result to continue using current thread.
+        write!(res, "QC{:x}", self.current_thread).unwrap();
+
         Ok(())
     }
 
@@ -308,9 +309,45 @@ impl SessionState {
         Ok(value)
     }
 
+    pub async fn parse_read_memory<H: GdbHandler>(
+        &mut self,
+        req: &[u8],
+        res: &mut Vec<u8>,
+        h: &mut H,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut iter = req.splitn(2, |&b| b == b',');
+        let addr = iter.next().unwrap(); // This should always success.
+        let len = iter.next().ok_or_else(|| "missing length")?;
+
+        // Parse target address and length. The docs does not say its format so I assume it is
+        // hexadecimal like other places.
+        let addr = Self::parse_hex(addr).ok_or_else(|| "invalid addr")?;
+        let len = Self::parse_hex(len).ok_or_else(|| "invalid length")?;
+
+        // Special case for zero length.
+        if len == 0 {
+            res.extend_from_slice(b"b");
+
+            return Ok(());
+        }
+
+        todo!()
+    }
+
     fn parse_hex(v: &[u8]) -> Option<usize> {
         std::str::from_utf8(v)
             .ok()
             .and_then(|v| usize::from_str_radix(v, 16).ok())
+    }
+}
+
+impl Default for SessionState {
+    fn default() -> Self {
+        Self {
+            current_thread: NonZero::<usize>::MIN,
+            no_ack: None,
+            thread_suffix_supported: false,
+            threads_in_stop_reply: false,
+        }
     }
 }

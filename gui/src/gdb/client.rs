@@ -121,7 +121,8 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "p" | data => state.parse_read_register(data, res, self.handler).await,
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qC-packet
-            "qC" => state.parse_current_thread(res),            // I think this does not worth for additional complexity on our side so we don't support
+            "qC" => state.parse_current_thread(res),
+            // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
             "QEnableErrorStrings" => Ok(()),
@@ -150,6 +151,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // TODO: https://github.com/obhq/obliteration/issues/1398
             "qVAttachOrWaitSupported" => Ok(()),
             "vCont?" => state.parse_vcont(res),
+            "x" | data => state.parse_read_memory(data, res, self.handler).await,
         }
 
         // Push checksum.
