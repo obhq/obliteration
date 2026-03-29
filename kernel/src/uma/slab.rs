@@ -21,7 +21,15 @@ impl<I> Slab<I> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141FE0|
-    pub fn alloc_item(&mut self) {
+    pub fn alloc_item(&mut self) -> *mut u8 {
+        self.hdr.free_count -= 1;
+
+        if self.hdr.free_count != 0 {
+            let off = self.hdr.first_free * self.hdr.keg.allocated_size();
+
+            return unsafe { self.hdr.items.add(off) };
+        }
+
         todo!()
     }
 }
@@ -29,6 +37,9 @@ impl<I> Slab<I> {
 /// Implementation of `uma_slab_head`.
 pub struct SlabHdr<I> {
     pub keg: Arc<UmaKeg<I>>, // us_keg
+    pub free_count: usize,   // us_freecount
+    pub first_free: usize,   // us_firstfree
+    pub items: *mut u8,      // us_data
 }
 
 /// Item in [Slab::free] to represents `uma_slab` structure.
@@ -53,15 +64,15 @@ unsafe impl FreeItem for StdFree {
 #[repr(C)]
 #[allow(dead_code)] // TODO: Remove this.
 pub struct RefFree {
-    pub item: u8,    // us_item
-    pub refcnt: u32, // us_refcnt
+    pub item: u8,  // us_item
+    pub refs: u32, // us_refcnt
 }
 
 unsafe impl FreeItem for RefFree {
     fn new(idx: usize) -> Self {
         Self {
             item: (idx + 1).try_into().unwrap(),
-            refcnt: 0,
+            refs: 0,
         }
     }
 

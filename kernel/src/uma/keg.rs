@@ -8,13 +8,14 @@ use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::num::NonZero;
-use core::ptr::{NonNull, addr_of_mut};
+use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg<T> {
     vm: Arc<Vm>,
     size: NonZero<usize>,             // uk_size
+    rsize: usize,                     // uk_rsize
     pgoff: usize,                     // uk_pgoff
     ppera: usize,                     // uk_ppera
     ipers: usize,                     // uk_ipers
@@ -67,16 +68,10 @@ impl<T: FreeItem> UmaKeg<T> {
         let free_item = hdr.size() - off;
         let available = PAGE_SIZE.get() - hdr.size();
 
-        // Get uk_ppera and uk_ipers.
-        let (ppera, ipers) = if flags.has_any(UmaFlags::CacheSpread) {
-            // Round size.
-            let rsize = if (size.get() & align) == 0 {
-                size.get()
-            } else {
-                (size.get() & !align) + align + 1
-            };
-
+        // Get uk_rsize, uk_ppera and uk_ipers.
+        let (rsize, ppera, ipers) = if flags.has_any(UmaFlags::CacheSpread) {
             // Get uk_rsize.
+            let rsize = size.get().next_multiple_of(align + 1);
             let align = align + 1;
             let rsize = if (rsize & align) == 0 {
                 // TODO: What is this?
@@ -89,10 +84,10 @@ impl<T: FreeItem> UmaKeg<T> {
             let pages = (PAGE_SIZE.get() / align * rsize) >> PAGE_SHIFT;
             let ppera = min(pages, (128 * 1024) / PAGE_SIZE);
 
-            // Get uk_ipers.
+            // TODO: Why we need to add the differences to the calculation?
             let ipers = (ppera * PAGE_SIZE.get() + (rsize - size.get())) / rsize;
 
-            (ppera, ipers)
+            (rsize, ppera, ipers)
         } else {
             // TODO: Not sure why we need space at least for 2 free item?
             if (size.get() + free_item) > available {
@@ -112,16 +107,11 @@ impl<T: FreeItem> UmaKeg<T> {
                     ppera += 1;
                 }
 
-                (ppera, 1)
+                (size.get(), ppera, 1)
             } else {
                 // Get uk_rsize.
                 let rsize = max(size, Uma::SMALLEST_UNIT);
-                let rsize = if (align & rsize.get()) == 0 {
-                    rsize.get()
-                } else {
-                    // Size is not multiple of alignment, align up.
-                    align + 1 + (!align & rsize.get())
-                };
+                let rsize = rsize.get().next_multiple_of(align + 1);
 
                 // Get uk_ipers.
                 let mut ipers = available / (rsize + free_item);
@@ -140,7 +130,7 @@ impl<T: FreeItem> UmaKeg<T> {
                     }
                 }
 
-                (1, ipers)
+                (rsize, 1, ipers)
             }
         };
 
@@ -184,6 +174,7 @@ impl<T: FreeItem> UmaKeg<T> {
         Self {
             vm,
             size,
+            rsize,
             pgoff,
             ppera,
             ipers,
@@ -204,6 +195,10 @@ impl<T: FreeItem> UmaKeg<T> {
 impl<T> UmaKeg<T> {
     pub fn size(&self) -> NonZero<usize> {
         self.size
+    }
+
+    pub fn allocated_size(&self) -> usize {
+        self.rsize
     }
 
     pub fn item_per_slab(&self) -> usize {
@@ -296,8 +291,18 @@ impl<T: FreeItem> UmaKeg<T> {
                     todo!()
                 }
 
-                // TODO: Populate remaining fields.
-                unsafe { addr_of_mut!((*hdr).keg).write(self.clone()) };
+                // TODO: I'm not confident about the memory layout here. The variables calculation
+                // during keg construction is very complicated and I don't fully understand it. If
+                // we encounter some memory corruptions then this is likely to be the root of
+                // problem.
+                let v = SlabHdr {
+                    keg: self.clone(),
+                    free_count: self.ipers,
+                    first_free: 0,
+                    items: mem,
+                };
+
+                unsafe { hdr.write(v) };
 
                 // Initialize free items. The offset calculation here should be optimized away.
                 let (_, off) = Layout::new::<SlabHdr<T>>()
