@@ -5,13 +5,13 @@ use crate::{
 };
 use aarch64::Esr;
 use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
-use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
+use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1, HV_REG_X2};
 use applevisor_sys::hv_sys_reg_t::{
     HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
     HV_SYS_REG_TTBR0_EL1, HV_SYS_REG_TTBR1_EL1,
 };
 use applevisor_sys::{
-    hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_run, hv_vcpu_set_reg,
+    hv_reg_t, hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_run, hv_vcpu_set_reg,
     hv_vcpu_set_sys_reg, hv_vcpu_t,
 };
 use std::marker::PhantomData;
@@ -74,6 +74,7 @@ impl<'a> Cpu for HvfCpu<'a> {
             pc: State::None,
             x0: State::None,
             x1: State::None,
+            x2: State::None,
         })
     }
 
@@ -104,9 +105,9 @@ pub struct HvfStates<'a, 'b> {
     ttbr1_el1: State<u64>,
     sp_el1: State<u64>,
     pc: State<u64>,
-
     x0: State<u64>,
     x1: State<u64>,
+    x2: State<u64>,
 }
 
 impl<'a, 'b> CpuStates for HvfStates<'a, 'b> {
@@ -157,7 +158,7 @@ impl<'a, 'b> CpuStates for HvfStates<'a, 'b> {
     }
 
     fn set_x2(&mut self, v: usize) {
-        todo!();
+        self.x2 = State::Dirty(v.try_into().unwrap());
     }
 }
 
@@ -166,12 +167,12 @@ impl<'a, 'b> CpuCommit for HvfStates<'a, 'b> {
         // Set PSTATE. Hypervisor Framework use CPSR to represent PSTATE.
         let cpu = self.cpu.instance;
         let set_reg = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_reg(cpu, reg, val) }) {
-            Some(v) => Err(v),
+            Some(v) => Err(StatesError::SetRegister(reg, v)),
             None => Ok(()),
         };
 
         if let State::Dirty(v) = self.pstate {
-            set_reg(HV_REG_CPSR, v).map_err(StatesError::SetPstateFailed)?;
+            set_reg(HV_REG_CPSR, v)?;
         }
 
         // Set system registers.
@@ -206,15 +207,19 @@ impl<'a, 'b> CpuCommit for HvfStates<'a, 'b> {
 
         // Set general registers.
         if let State::Dirty(v) = self.pc {
-            set_reg(HV_REG_PC, v).map_err(StatesError::SetPcFailed)?;
+            set_reg(HV_REG_PC, v)?;
         }
 
         if let State::Dirty(v) = self.x0 {
-            set_reg(HV_REG_X0, v).map_err(StatesError::SetX0Failed)?;
+            set_reg(HV_REG_X0, v)?;
         }
 
         if let State::Dirty(v) = self.x1 {
-            set_reg(HV_REG_X1, v).map_err(StatesError::SetX1Failed)?;
+            set_reg(HV_REG_X1, v)?;
+        }
+
+        if let State::Dirty(v) = self.x2 {
+            set_reg(HV_REG_X2, v)?;
         }
 
         Ok(())
@@ -272,7 +277,7 @@ impl<'a, 'b> CpuIo for HvfIo<'a, 'b> {
         todo!();
     }
 
-    fn buffer(&mut self) -> IoBuf {
+    fn buffer(&mut self) -> IoBuf<'_> {
         todo!();
     }
 
@@ -306,12 +311,6 @@ pub enum RunError {
 /// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
 #[derive(Debug, Error)]
 pub enum StatesError {
-    #[error("couldn't read the register")]
-    ReadRegisterFailed(NonZero<hv_return_t>),
-
-    #[error("couldn't set PSTATE")]
-    SetPstateFailed(NonZero<hv_return_t>),
-
     #[error("couldn't set SCTLR_EL1")]
     SetSctlrFailed(NonZero<hv_return_t>),
 
@@ -330,12 +329,6 @@ pub enum StatesError {
     #[error("couldn't set SP_EL1")]
     SetSpEl1Failed(NonZero<hv_return_t>),
 
-    #[error("couldn't set PC")]
-    SetPcFailed(NonZero<hv_return_t>),
-
-    #[error("couldn't set X0")]
-    SetX0Failed(NonZero<hv_return_t>),
-
-    #[error("couldn't set X1")]
-    SetX1Failed(NonZero<hv_return_t>),
+    #[error("couldn't set {0:?} (code: {1:#x})")]
+    SetRegister(hv_reg_t, NonZero<hv_return_t>),
 }
