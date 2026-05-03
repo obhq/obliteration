@@ -1,7 +1,7 @@
 use super::bucket::{BucketItem, UmaBucket};
 use super::{Alloc, FreeItem, Slab, StdFree, Uma, UmaBox, UmaFlags, UmaKeg};
 use crate::context::{CpuLocal, current_thread};
-use crate::lock::{Mutex, MutexGuard};
+use crate::lock::Mutex;
 use crate::vm::Vm;
 use alloc::collections::VecDeque;
 use alloc::collections::linked_list::LinkedList;
@@ -22,9 +22,11 @@ pub struct UmaZone<T> {
     bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
     ty: ZoneType,
     size: NonZero<usize>, // uz_size
-    slab: fn(&Self, Option<&Arc<UmaKeg<T>>>, Alloc) -> Option<NonNull<Slab<T>>>, // uz_slab
-    caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
-    flags: UmaFlags,      // uz_flags
+    slab: fn(&Self, &mut ZoneState<T>, Option<&Arc<UmaKeg<T>>>, Alloc) -> Option<NonNull<Slab<T>>>, // uz_slab
+    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // uz_init
+    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // uz_ctor
+    caches: CpuLocal<RefCell<UmaCache>>,                      // uz_cpu
+    flags: UmaFlags,                                          // uz_flags
     state: Mutex<ZoneState<T>>,
 }
 
@@ -120,6 +122,8 @@ impl<T: FreeItem> UmaZone<T> {
             ty,
             size: keg.size(),
             slab: Self::fetch_slab,
+            init: None,
+            ctor: None,
             caches: CpuLocal::new(|_| RefCell::default()),
             flags,
             state: Mutex::new(ZoneState {
@@ -227,8 +231,8 @@ impl<T> UmaZone<T> {
                 state.count += 1;
             }
 
-            if self.alloc_bucket(state, flags) {
-                return self.alloc_item(flags);
+            if self.alloc_bucket(&mut state, flags) {
+                return self.alloc_item(&mut state, flags);
             }
         }
     }
@@ -256,7 +260,7 @@ impl<T> UmaZone<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
-    fn alloc_bucket(&self, state: MutexGuard<ZoneState<T>>, flags: Alloc) -> bool {
+    fn alloc_bucket(&self, state: &mut ZoneState<T>, flags: Alloc) -> bool {
         match state.free_buckets.front() {
             Some(_) => todo!(),
             None => {
@@ -271,8 +275,9 @@ impl<T> UmaZone<T> {
                     // Alloc a bucket.
                     let i = (state.count + 15) >> Uma::BUCKET_SHIFT;
                     let k = self.bucket_keys[i];
+                    let b = &self.bucket_zones[k];
 
-                    self.bucket_zones[k].alloc_item(flags);
+                    b.alloc_item(&mut b.state.lock(), flags);
 
                     todo!()
                 }
@@ -288,14 +293,28 @@ impl<T> UmaZone<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DD50|
-    fn alloc_item(&self, flags: Alloc) -> *mut u8 {
+    fn alloc_item(&self, state: &mut ZoneState<T>, flags: Alloc) -> *mut u8 {
         // Get a slab.
-        let slab = (self.slab)(self, None, flags);
+        let slab = (self.slab)(self, state, None, flags);
 
         if let Some(mut slab) = slab {
-            unsafe { slab.as_mut().alloc_item() };
+            let item = unsafe { slab.as_mut().alloc_item() };
 
-            todo!()
+            state.alloc_count += 1;
+
+            if self.init.is_none_or(|f| f(item, self.size, flags)) {
+                if self.ctor.is_none_or(|f| f(item, self.size, flags)) {
+                    if flags.has_any(Alloc::Zero) {
+                        todo!()
+                    }
+
+                    return item;
+                } else {
+                    todo!()
+                }
+            } else {
+                todo!()
+            }
         }
 
         todo!()
@@ -309,8 +328,12 @@ impl<T: FreeItem> UmaZone<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    fn fetch_slab(&self, keg: Option<&Arc<UmaKeg<T>>>, flags: Alloc) -> Option<NonNull<Slab<T>>> {
-        let state = self.state.lock();
+    fn fetch_slab(
+        &self,
+        state: &mut ZoneState<T>,
+        keg: Option<&Arc<UmaKeg<T>>>,
+        flags: Alloc,
+    ) -> Option<NonNull<Slab<T>>> {
         let keg = keg.unwrap_or(state.kegs.front().unwrap());
 
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
