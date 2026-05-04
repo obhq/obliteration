@@ -828,6 +828,7 @@ impl App for MainProgram {
             logs,
             pending_bps: Vec::new(),
             registers: RegisterValues::default(),
+            memory_data: None,
         };
 
         loop {
@@ -854,6 +855,7 @@ struct Context<H> {
     logs: LogWriter,
     pending_bps: Vec<(usize, Option<DebugEvent>)>,
     registers: RegisterValues,
+    memory_data: Option<Vec<u8>>,
 }
 
 impl<H: Hypervisor> Context<H> {
@@ -920,6 +922,7 @@ impl<H: Hypervisor> Context<H> {
             VmmEvent::RipValue(v) => self.registers.rip = Some(v),
             #[cfg(target_arch = "x86_64")]
             VmmEvent::RspValue(v) => self.registers.rsp = Some(v),
+            VmmEvent::MemoryData(v) => self.memory_data = Some(v),
             VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
@@ -982,6 +985,33 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
         td: NonZero<usize>,
     ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
         self.read_reg(td, VmmCommand::ReadRsp, |v| &mut v.rsp)
+    }
+
+    async fn read_memory(
+        &mut self,
+        td: NonZero<usize>,
+        addr: usize,
+        len: NonZero<usize>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        // Send VMM request.
+        let cpu = td.get() - 1;
+
+        if self
+            .vmm
+            .send(cpu, VmmCommand::ReadMemory(addr, len))
+            .is_some()
+        {
+            return Err(format!("invalid thread-id '{td}'").into());
+        }
+
+        // Wait for the value.
+        loop {
+            if let Some(v) = self.memory_data.take() {
+                break Ok(v);
+            }
+
+            self.read_vmm().await?;
+        }
     }
 }
 

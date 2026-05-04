@@ -70,11 +70,12 @@ fn read_ptr<H: Hypervisor>(
         .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, Box::new(e)))?;
 
     // Get data.
-    let ptr = hv.ram().slice(paddr, len);
+    let (ptr, avai) = hv.ram().slice(paddr, len);
 
-    match ptr.is_null() {
-        true => Err(MmioError::InvalidAddr { vaddr, paddr }),
-        false => Ok(ptr),
+    if ptr.is_null() || avai != len.get() {
+        Err(MmioError::InvalidAddr { vaddr, paddr })
+    } else {
+        Ok(ptr)
     }
 }
 

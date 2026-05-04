@@ -143,9 +143,9 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         assert_eq!(addr % 4096, 0);
 
         // Allocate.
-        let tab = self.hv.ram().slice(addr, len);
+        let (tab, avai) = self.hv.ram().slice(addr, len);
 
-        if tab.is_null() {
+        if tab.is_null() || avai != len.get() {
             return None;
         }
 

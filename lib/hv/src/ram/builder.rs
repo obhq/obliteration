@@ -76,9 +76,9 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             .get()
             .checked_next_multiple_of(self.vm_page_size.get())?;
         let len = unsafe { NonZero::new_unchecked(len) };
-        let ptr = self.hv.ram().slice(paddr, len);
+        let (ptr, avai) = self.hv.ram().slice(paddr, len);
 
-        if ptr.is_null() {
+        if ptr.is_null() || avai != len.get() {
             return None;
         }
 
@@ -91,7 +91,8 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             unsafe { ptr.add(i).write(0) };
         }
 
-        // Now it is safe to create a slice.
+        // SAFETY: The memory was initialized on the above and we have exclusive access to the
+        // hypervisor, which mean no any vCPU currently running.
         let mem = unsafe { std::slice::from_raw_parts_mut(ptr, len.get()) };
 
         Some((paddr, mem))
