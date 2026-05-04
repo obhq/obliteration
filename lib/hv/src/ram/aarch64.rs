@@ -24,16 +24,15 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             .next_multiple_of(self.vm_page_size.get())
             .try_into()
             .unwrap();
-        let l0t = self.hv.ram().slice(page_table, len);
-        let l0t = match l0t.is_null() {
-            true => return Err(RamBuilderError::AllocPageTableLevel0),
-            false => {
-                for i in 0..len.get() {
-                    unsafe { l0t.add(i).write(0) };
-                }
-
-                unsafe { transmute(l0t) }
+        let (l0t, avai) = self.hv.ram().slice(page_table, len);
+        let l0t = if l0t.is_null() || avai != len.get() {
+            return Err(RamBuilderError::AllocPageTableLevel0);
+        } else {
+            for i in 0..len.get() {
+                unsafe { l0t.add(i).write(0) };
             }
+
+            unsafe { transmute(l0t) }
         };
 
         self.next += len.get();
@@ -176,9 +175,9 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             .unwrap();
 
         // Allocate.
-        let tab = self.hv.ram().slice(addr, len);
+        let (tab, avai) = self.hv.ram().slice(addr, len);
 
-        if tab.is_null() {
+        if tab.is_null() || avai != len.get() {
             return None;
         }
 

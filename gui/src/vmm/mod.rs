@@ -519,9 +519,9 @@ impl Vmm<()> {
         }
 
         // SAFETY: We have an exclusive access to the hypervisor.
-        let kern = hv.ram().slice(map.kern_paddr, map.kern_len);
+        let (kern, avai) = hv.ram().slice(map.kern_paddr, map.kern_len);
 
-        assert!(!kern.is_null());
+        assert!(!kern.is_null() && avai == map.kern_len.get());
 
         // Get PT_DYNAMIC.
         let kern = unsafe { std::slice::from_raw_parts_mut(kern, map.kern_len.get()) };
@@ -808,6 +808,27 @@ impl<H: Hypervisor> Vmm<H> {
                 VmmCommand::ReadRip => get_rex!("rip", get_rip, RipValue),
                 #[cfg(target_arch = "x86_64")]
                 VmmCommand::ReadRsp => get_rex!("rsp", get_rsp, RspValue),
+                VmmCommand::ReadMemory(addr, len) => {
+                    let addr = cpu
+                        .translate(addr)
+                        .map_err(move |e| CpuError::TranslateAddr(addr, Box::new(e)))?;
+                    let (ptr, avai) = args.hv.ram().slice(addr, len);
+                    let mut data = Vec::new();
+
+                    if !ptr.is_null() && avai != 0 {
+                        data.reserve_exact(avai);
+
+                        // SAFETY: ptr is valid for read up to avai and data is valid for write up
+                        // to avai. Both ptr and data probperly aligned and not overlapped.
+                        unsafe { ptr.copy_to_nonoverlapping(data.as_mut_ptr(), avai) };
+
+                        // SAFETY: avai is the same value as the one passed to reserve_exact and the
+                        // content has been initialized by the above copy.
+                        unsafe { data.set_len(avai) };
+                    }
+
+                    tx.send(VmmEvent::MemoryData(data));
+                }
                 VmmCommand::TranslateAddress(addr) => match cpu.translate(addr) {
                     Ok(v) => tx.send(VmmEvent::TranslatedAddress(v)),
                     Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
@@ -877,6 +898,7 @@ pub enum VmmCommand {
     ReadRip,
     #[cfg(target_arch = "x86_64")]
     ReadRsp,
+    ReadMemory(usize, NonZero<usize>),
     TranslateAddress(usize),
     Release,
 }
@@ -891,6 +913,7 @@ pub enum VmmEvent {
     RipValue(usize),
     #[cfg(target_arch = "x86_64")]
     RspValue(usize),
+    MemoryData(Vec<u8>),
     TranslatedAddress(usize),
 }
 

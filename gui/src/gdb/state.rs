@@ -314,6 +314,7 @@ impl SessionState {
         req: &[u8],
         res: &mut Vec<u8>,
         h: &mut H,
+        bin: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut iter = req.splitn(2, |&b| b == b',');
         let addr = iter.next().unwrap(); // This should always success.
@@ -325,13 +326,32 @@ impl SessionState {
         let len = Self::parse_hex(len).ok_or_else(|| "invalid length")?;
 
         // Special case for zero length.
-        if len == 0 {
-            res.extend_from_slice(b"b");
+        let len = match NonZero::new(len) {
+            Some(v) => v,
+            None => {
+                if bin {
+                    res.extend_from_slice(b"b");
+                }
 
-            return Ok(());
+                return Ok(());
+            }
+        };
+
+        // Read memory.
+        let data = h.read_memory(self.current_thread, addr, len).await?;
+
+        if bin {
+            res.extend_from_slice(b"b");
+            res.extend_from_slice(&data);
+        } else {
+            let off = res.len();
+
+            res.resize(off + data.len(), 0);
+
+            hex::encode_to_slice(data, &mut res[off..]).unwrap();
         }
 
-        todo!()
+        Ok(())
     }
 
     fn parse_hex(v: &[u8]) -> Option<usize> {

@@ -2,6 +2,7 @@
 pub use self::builder::*;
 
 use super::HvError;
+use std::cmp::min;
 use std::num::NonZero;
 use std::ptr::null_mut;
 
@@ -43,18 +44,20 @@ impl Ram {
         self.len
     }
 
-    /// Returns null if combination of `addr` and `len` out of allocated memory.
-    pub fn slice(&self, addr: usize, len: NonZero<usize>) -> *mut u8 {
+    /// Returns null if `addr` is not valid.
+    ///
+    /// This method is safe but using the returned pointer is not. Beware that turning the returned
+    /// pointer into a slice **always** trigger UB since the memory can be read or write by any vCPU
+    /// at anytime. You need to copy the data to a temporary buffer with [std::ptr::copy()] before
+    /// you can access it from safe Rust.
+    pub fn slice(&self, addr: usize, len: NonZero<usize>) -> (*mut u8, usize) {
         // Check if the requested range valid.
-        let end = match addr.checked_add(len.get()) {
-            Some(v) => v,
-            None => return null_mut(),
-        };
+        let end = addr.saturating_add(len.get());
+        let end = min(end, self.len.get());
 
-        if end > self.len.get() {
-            null_mut()
-        } else {
-            unsafe { self.mem.add(addr) }
+        match end.checked_sub(addr) {
+            Some(len) => unsafe { (self.mem.add(addr), len) },
+            None => (null_mut(), 0),
         }
     }
 }

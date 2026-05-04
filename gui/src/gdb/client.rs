@@ -118,6 +118,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "?" => state.parse_stop_reason(res, self.handler).await,
             "jThreadsInfo" => Ok(()),
+            "m" | data => state.parse_read_memory(data, res, self.handler, false).await,
             // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "p" | data => state.parse_read_register(data, res, self.handler).await,
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qC-packet
@@ -151,7 +152,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // TODO: https://github.com/obhq/obliteration/issues/1398
             "qVAttachOrWaitSupported" => Ok(()),
             "vCont?" => state.parse_vcont(res),
-            "x" | data => state.parse_read_memory(data, res, self.handler).await,
+            "x" | data => state.parse_read_memory(data, res, self.handler, true).await,
         }
 
         // Push checksum.
