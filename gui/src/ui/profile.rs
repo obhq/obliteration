@@ -249,7 +249,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         dst.set_selected_device(self.devices.position(&p.display_device).unwrap_or(0));
         dst.set_selected_resolution(self.resolutions.position(p.display_resolution).unwrap());
         dst.set_selected_cpu(self.cpus.position(p.cpu_model).unwrap());
-        dst.set_cpu_count(p.kernel_config.max_cpu.get().try_into().unwrap());
+        dst.set_cpu_count(p.kernel_config.cpu_count.get().try_into().unwrap());
         dst.set_debug_address(p.debug_addr.to_shared_string());
         dst.set_selected_idps_product(
             self.products
@@ -294,7 +294,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         p.display_device = ByteBuf::from(self.devices.get(src.get_selected_device()).unwrap().id());
         p.display_resolution = self.resolutions.get(src.get_selected_resolution()).unwrap();
         p.cpu_model = self.cpus.get(src.get_selected_cpu()).unwrap();
-        p.kernel_config.max_cpu = src
+        p.kernel_config.cpu_count = src
             .get_cpu_count()
             .try_into()
             .ok()

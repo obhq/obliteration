@@ -1,11 +1,10 @@
-pub use self::boxed::*;
 pub use self::slab::StdFree;
 pub use self::zone::*;
 
+pub(self) use self::bucket::*;
 pub(self) use self::keg::*;
 pub(self) use self::slab::{FreeItem, Slab, SlabHdr};
 
-use self::bucket::{BucketItem, UmaBucket};
 use crate::config::PAGE_SIZE;
 use crate::vm::Vm;
 use alloc::format;
@@ -20,7 +19,6 @@ use macros::bitflag;
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
-mod boxed;
 mod bucket;
 mod keg;
 mod slab;
@@ -61,7 +59,7 @@ impl Uma {
         // Create bucket zones.
         for (si, size) in Self::BUCKET_SIZES.into_iter().enumerate() {
             let items = Layout::array::<BucketItem>(size).unwrap();
-            let layout = Layout::new::<UmaBucket<()>>()
+            let layout = Layout::new::<BucketHdr>()
                 .extend(items)
                 .unwrap()
                 .0

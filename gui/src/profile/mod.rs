@@ -44,7 +44,7 @@ impl Profile {
             created: SystemTime::now(),
         };
 
-        v.kernel_config.max_cpu = NonZero::new(8).unwrap();
+        v.kernel_config.cpu_count = NonZero::new(8).unwrap();
         v
     }
 

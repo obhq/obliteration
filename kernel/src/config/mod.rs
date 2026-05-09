@@ -16,7 +16,7 @@ pub const PAGE_MASK: NonZero<usize> = NonZero::new(PAGE_SIZE.get() - 1).unwrap()
 
 /// Runtime configurations for the kernel populated from [`config::Config`].
 pub struct Config {
-    max_cpu: NonZero<usize>,
+    cpu_count: NonZero<u8>,
     unknown_dmem1: u8, // TODO: Figure out a correct name.
     idps: &'static ConsoleId,
     qa: bool,
@@ -29,7 +29,7 @@ impl Config {
         let env_vars = Self::load_env(src);
 
         Arc::new(Self {
-            max_cpu: src.max_cpu,
+            cpu_count: src.cpu_count,
             unknown_dmem1: 0,
             idps: &src.idps,
             qa: src.qa,
@@ -38,8 +38,14 @@ impl Config {
         })
     }
 
-    pub fn max_cpu(&self) -> NonZero<usize> {
-        self.max_cpu
+    /// See `mp_ncpus` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset  |
+    /// |---------|---------|
+    /// |PS4 11.00|0x2168108|
+    pub fn cpu_count(&self) -> NonZero<u8> {
+        self.cpu_count
     }
 
     pub fn unknown_dmem1(&self) -> u8 {

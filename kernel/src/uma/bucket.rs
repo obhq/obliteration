@@ -1,15 +1,19 @@
 /// Implementation of `uma_bucket` structure.
+///
+/// # Safety
+/// Adding more fields into this struct without knowing how it work can cause undefined behavior in
+/// some places.
 #[repr(C)]
-pub struct UmaBucket<I: ?Sized> {
-    len: usize, // ub_cnt
-    items: I,   // ub_bucket
+pub struct UmaBucket {
+    pub hdr: BucketHdr,
+    pub items: [BucketItem], // ub_bucket
 }
 
-impl<I: ?Sized> UmaBucket<I> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
+/// Header of [UmaBucket].
+#[repr(C)]
+pub struct BucketHdr {
+    pub len: usize, // ub_cnt
 }
 
-/// Each item in the [`UmaBucket::items`].
+/// Each item in [UmaBucket].
 pub struct BucketItem {}

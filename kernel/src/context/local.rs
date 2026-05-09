@@ -14,7 +14,7 @@ pub struct CpuLocal<T>(Vec<T>);
 
 impl<T> CpuLocal<T> {
     pub fn new(mut f: impl FnMut(usize) -> T) -> Self {
-        let len = config().max_cpu().get();
+        let len = config().cpu_count().get().into();
         let mut vec = Vec::with_capacity(len);
 
         for i in 0..len {
