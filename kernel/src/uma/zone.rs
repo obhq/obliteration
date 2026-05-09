@@ -1,6 +1,5 @@
-use super::bucket::{BucketItem, UmaBucket};
-use super::{Alloc, FreeItem, Slab, StdFree, Uma, UmaBox, UmaFlags, UmaKeg};
-use crate::context::{CpuLocal, current_thread};
+use super::{Alloc, BucketHdr, FreeItem, Slab, StdFree, Uma, UmaBucket, UmaFlags, UmaKeg};
+use crate::context::{CpuLocal, config, current_thread};
 use crate::lock::Mutex;
 use crate::vm::Vm;
 use alloc::collections::VecDeque;
@@ -133,6 +132,7 @@ impl<T: FreeItem> UmaZone<T> {
                 alloc_count: 0,
                 free_count: 0,
                 count,
+                fills: 0,
             }),
         }
     }
@@ -238,12 +238,15 @@ impl<T> UmaZone<T> {
     }
 
     fn alloc_from_cache(c: &mut UmaCache) -> *mut u8 {
-        while let Some(b) = &mut c.alloc {
-            if b.len() != 0 {
+        while let Some(b) = c.alloc.map(|v| v.as_ptr()) {
+            if unsafe { (*b).hdr.len != 0 } {
                 todo!()
             }
 
-            if c.free.as_ref().is_some_and(|b| b.len() != 0) {
+            if c.free
+                .map(|v| v.as_ptr())
+                .is_some_and(|b| unsafe { (*b).hdr.len != 0 })
+            {
                 core::mem::swap(&mut c.alloc, &mut c.free);
                 continue;
             }
@@ -261,7 +264,8 @@ impl<T> UmaZone<T> {
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
     fn alloc_bucket(&self, state: &mut ZoneState<T>, flags: Alloc) -> bool {
-        match state.free_buckets.front() {
+        // Get bucket.
+        let b = match state.free_buckets.front() {
             Some(_) => todo!(),
             None => {
                 if self.bucket_enable.load(Ordering::Relaxed) {
@@ -276,12 +280,35 @@ impl<T> UmaZone<T> {
                     let i = (state.count + 15) >> Uma::BUCKET_SHIFT;
                     let k = self.bucket_keys[i];
                     let b = &self.bucket_zones[k];
+                    let b = b.alloc_item(&mut b.state.lock(), flags);
 
-                    b.alloc_item(&mut b.state.lock(), flags);
+                    if b.is_null() {
+                        todo!()
+                    }
 
+                    // Initialize bucket.
+                    let h = BucketHdr { len: 0 };
+
+                    unsafe { core::ptr::write(b.cast(), h) };
+
+                    core::ptr::slice_from_raw_parts_mut(b, Uma::BUCKET_SIZES[k]) as *mut UmaBucket
+                } else {
                     todo!()
                 }
             }
+        };
+
+        // SAFETY: We have exclusive access to the bucket.
+        let b = unsafe { &mut *b };
+
+        if state.fills < config().cpu_count().get().into() {
+            state.fills += 1;
+
+            if b.hdr.len < min(b.items.len(), state.count) {
+                todo!()
+            }
+
+            todo!()
         }
 
         true
@@ -354,15 +381,18 @@ impl<T: FreeItem> UmaZone<T> {
 
 /// Contains mutable data for [UmaZone].
 struct ZoneState<T> {
-    kegs: LinkedList<Arc<UmaKeg<T>>>, // uz_kegs + uz_klink
-    full_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_full_bucket
-    free_buckets: VecDeque<UmaBox<UmaBucket<[BucketItem]>>>, // uz_free_bucket
-    alloc_count: u64,                 // uz_allocs
-    free_count: u64,                  // uz_frees
-    count: usize,                     // uz_count
+    kegs: LinkedList<Arc<UmaKeg<T>>>,           // uz_kegs + uz_klink
+    full_buckets: VecDeque<NonNull<UmaBucket>>, // uz_full_bucket
+    free_buckets: VecDeque<NonNull<UmaBucket>>, // uz_free_bucket
+    alloc_count: u64,                           // uz_allocs
+    free_count: u64,                            // uz_frees
+    count: usize,                               // uz_count
+    fills: u16,                                 // uz_fills
 }
 
-/// Type of [`UmaZone`].
+unsafe impl<T: Send> Send for ZoneState<T> {}
+
+/// Type of [UmaZone].
 #[derive(Clone, Copy)]
 enum ZoneType {
     Other,
@@ -381,8 +411,10 @@ enum ZoneType {
 /// Implementation of `uma_cache` structure.
 #[derive(Default)]
 struct UmaCache {
-    alloc: Option<UmaBox<UmaBucket<[BucketItem]>>>, // uc_allocbucket
-    free: Option<UmaBox<UmaBucket<[BucketItem]>>>,  // uc_freebucket
-    allocs: u64,                                    // uc_allocs
-    frees: u64,                                     // uc_frees
+    alloc: Option<NonNull<UmaBucket>>, // uc_allocbucket
+    free: Option<NonNull<UmaBucket>>,  // uc_freebucket
+    allocs: u64,                       // uc_allocs
+    frees: u64,                        // uc_frees
 }
+
+unsafe impl Send for UmaCache {}

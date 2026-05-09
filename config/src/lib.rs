@@ -38,7 +38,7 @@ pub enum BootEnv {
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct Config {
-    pub max_cpu: NonZero<usize>,
+    pub cpu_count: NonZero<u8>,
     pub idps: ConsoleId,
     pub qa: bool,
     pub qa_flags: QaFlags,
@@ -113,7 +113,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         let mut c = Self {
-            max_cpu: NonZero::new(1).unwrap(),
+            cpu_count: NonZero::new(1).unwrap(),
             idps: ConsoleId::default(),
             qa: false,
             qa_flags: QaFlags::default(),

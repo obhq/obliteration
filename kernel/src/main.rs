@@ -64,7 +64,7 @@ fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) ->
         ),
         String::from_utf8_lossy(hw),
         cpu.cpu_vendor,
-        config.max_cpu(),
+        config.cpu_count(),
         cpu.cpu_id,
         config.idps().product,
         map.kern_vsize
