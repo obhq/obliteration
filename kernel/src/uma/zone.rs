@@ -390,7 +390,9 @@ struct ZoneState<T> {
     fills: u16,                                 // uz_fills
 }
 
-/// Type of [`UmaZone`].
+unsafe impl<T: Send> Send for ZoneState<T> {}
+
+/// Type of [UmaZone].
 #[derive(Clone, Copy)]
 enum ZoneType {
     Other,
@@ -414,3 +416,5 @@ struct UmaCache {
     allocs: u64,                       // uc_allocs
     frees: u64,                        // uc_frees
 }
+
+unsafe impl Send for UmaCache {}
