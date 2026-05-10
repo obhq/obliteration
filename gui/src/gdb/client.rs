@@ -117,6 +117,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "?" => state.parse_stop_reason(res, self.handler).await,
+            "c" | data => state.parse_continue(data, res, self.handler),
             "jThreadsInfo" => Ok(()),
             "m" | data => state.parse_read_memory(data, res, self.handler, false).await,
             // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html

@@ -10,8 +10,8 @@ use crate::util::channel::{Receiver, Sender};
 use config::{BootEnv, Config, ConsoleType, KernelMap, MapType, PhysMap, Vm};
 use futures::FutureExt;
 use hv::{
-    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, PhysMapping,
-    RamBuilder, RamBuilderError,
+    CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor,
+    PhysMapping, RamBuilder, RamBuilderError,
 };
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
@@ -833,7 +833,22 @@ impl<H: Hypervisor> Vmm<H> {
                     Ok(v) => tx.send(VmmEvent::TranslatedAddress(v)),
                     Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
                 },
-                VmmCommand::Release => break,
+                VmmCommand::Release(Some(addr)) => {
+                    let mut st = cpu.states().map_err(|e| CpuError::GetStates(Box::new(e)))?;
+
+                    #[cfg(target_arch = "aarch64")]
+                    st.set_pc(addr);
+
+                    #[cfg(target_arch = "x86_64")]
+                    st.set_rip(addr);
+
+                    if let Err(e) = st.commit() {
+                        return Err(CpuError::CommitStates(Box::new(e)));
+                    }
+
+                    break;
+                }
+                VmmCommand::Release(None) => break,
             }
         }
 
@@ -900,7 +915,7 @@ pub enum VmmCommand {
     ReadRsp,
     ReadMemory(usize, NonZero<usize>),
     TranslateAddress(usize),
-    Release,
+    Release(Option<usize>),
 }
 
 /// Event from a CPU.
@@ -1050,6 +1065,9 @@ pub enum CpuError {
 
     #[error("couldn't get vCPU states")]
     GetStates(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't commit vCPU states")]
+    CommitStates(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't read {0} register")]
     ReadReg(&'static str, #[source] Box<dyn Error + Send + Sync>),

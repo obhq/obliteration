@@ -963,6 +963,20 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
         Ok(())
     }
 
+    fn resume_thread(
+        &mut self,
+        td: NonZero<usize>,
+        addr: Option<usize>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let cpu = td.get() - 1;
+
+        if self.vmm.send(cpu, VmmCommand::Release(addr)).is_some() {
+            return Err(format!("invalid thread-id '{td}'").into());
+        }
+
+        Ok(())
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn read_rax(
         &mut self,
