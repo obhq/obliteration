@@ -155,14 +155,26 @@ impl SessionState {
         res: &mut Vec<u8>,
         h: &mut H,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Report stopped due to SIGTRAP (signal 5).
-        // Signal numbers are from the host OS. SIGTRAP is typically 5 on Unix systems.
-        // https://github.com/bminor/binutils-gdb/blob/83bf56647ce42ed79e5f007015afdd1f7a842d36/include/gdb/signals.def#L27
         h.suspend_threads().await?;
 
-        res.extend_from_slice(b"S05");
+        // https://sourceware.org/git/?p=binutils-gdb.git;a=blob;f=include/gdb/signals.def
+        res.extend_from_slice(b"S96"); // EXC_BREAKPOINT
 
         Ok(())
+    }
+
+    pub fn parse_continue<H: GdbHandler>(
+        &mut self,
+        req: &[u8],
+        _: &mut Vec<u8>,
+        h: &mut H,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: It is unclear if this resume current thread or all threads.
+        let addr = if req.is_empty() { None } else { todo!() };
+
+        h.resume_thread(self.current_thread, addr)?;
+
+        todo!("reply on next stop")
     }
 
     pub fn parse_first_thread_info<H: GdbHandler>(
