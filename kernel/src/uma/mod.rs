@@ -58,7 +58,7 @@ impl Uma {
 
         // Create bucket zones.
         for (si, size) in Self::BUCKET_SIZES.into_iter().enumerate() {
-            let items = Layout::array::<BucketItem>(size).unwrap();
+            let items = Layout::array::<*mut u8>(size).unwrap();
             let layout = Layout::new::<BucketHdr>()
                 .extend(items)
                 .unwrap()

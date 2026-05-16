@@ -269,8 +269,9 @@ impl<T> UmaZone<T> {
             Some(_) => todo!(),
             None => {
                 if self.bucket_enable.load(Ordering::Relaxed) {
-                    // Get allocation flags.
-                    let mut flags = flags & !Alloc::Zero;
+                    // Get allocation flags. On Orbis it will remove M_ZERO from the flags but we do
+                    // the opposite to eliminate the chance of dangling pointer in bucket items.
+                    let mut flags = flags;
 
                     if self.flags.has_any(UmaFlags::CacheOnly) {
                         flags |= Alloc::NoVm;
@@ -302,10 +303,27 @@ impl<T> UmaZone<T> {
         let b = unsafe { &mut *b };
 
         if state.fills < config().cpu_count().get().into() {
+            let n = min(b.items.len(), state.count);
+            let mut k = None;
+            let mut f = flags;
+
             state.fills += 1;
 
-            if b.hdr.len < min(b.items.len(), state.count) {
-                todo!()
+            while b.hdr.len < n {
+                let s = match (self.slab)(self, state, k.as_ref(), f) {
+                    Some(v) => v.as_ptr(),
+                    None => todo!(),
+                };
+
+                while unsafe { (*s).hdr.free_count != 0 && b.hdr.len < n } {
+                    let i = unsafe { (*s).alloc_item() };
+
+                    b.items[b.hdr.len] = i;
+                    b.hdr.len += 1;
+                }
+
+                k = unsafe { Some((*s).hdr.keg.clone()) };
+                f |= Alloc::NoWait;
             }
 
             todo!()
