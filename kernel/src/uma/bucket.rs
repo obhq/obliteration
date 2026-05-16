@@ -6,7 +6,7 @@
 #[repr(C)]
 pub struct UmaBucket {
     pub hdr: BucketHdr,
-    pub items: [BucketItem], // ub_bucket
+    pub items: [*mut u8], // ub_bucket
 }
 
 /// Header of [UmaBucket].
@@ -14,6 +14,3 @@ pub struct UmaBucket {
 pub struct BucketHdr {
     pub len: usize, // ub_cnt
 }
-
-/// Each item in [UmaBucket].
-pub struct BucketItem {}
