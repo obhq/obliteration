@@ -606,40 +606,6 @@ impl MainProgram {
 
         Ok(Some(client))
     }
-
-    async fn dispatch_gdb<H: Hypervisor>(
-        cx: &mut Context<H>,
-        res: Result<usize, std::io::Error>,
-        gdb: &mut GdbSession,
-        buf: &[u8],
-        con: &mut (dyn AsyncWrite + Unpin),
-    ) -> Result<bool, ProgramError> {
-        // Check status.
-        let len = res.map_err(ProgramError::ReadDebuggerSocket)?;
-
-        if len == 0 {
-            return Ok(false);
-        }
-
-        // Dispatch the requests.
-        let mut dis = gdb.dispatch_client(&buf[..len], cx);
-
-        while let Some(res) = dis
-            .pump()
-            .await
-            .map_err(|e| ProgramError::DispatchDebugger(Box::new(e)))?
-        {
-            let res = res.as_ref();
-
-            if !res.is_empty() {
-                con.write_all(res)
-                    .await
-                    .map_err(ProgramError::WriteDebuggerSocket)?;
-            }
-        }
-
-        Ok(true)
-    }
 }
 
 impl App for MainProgram {
@@ -835,7 +801,7 @@ impl App for MainProgram {
             // Wait for event.
             let r = select_biased! {
                 v = gdb_read.read(&mut gdb_buf).fuse() => {
-                    Self::dispatch_gdb(&mut cx, v, &mut gdb, &gdb_buf, &mut gdb_write).await?
+                    cx.dispatch_gdb(v, &mut gdb, &gdb_buf, &mut gdb_write).await?
                 }
                 v = cx.vmm.recv().fuse() => cx.dispatch_vmm(v.0, v.1).await?,
             };
@@ -924,6 +890,40 @@ impl<H: Hypervisor> Context<H> {
             VmmEvent::RspValue(v) => self.registers.rsp = Some(v),
             VmmEvent::MemoryData(v) => self.memory_data = Some(v),
             VmmEvent::TranslatedAddress(_) => todo!(),
+        }
+
+        Ok(true)
+    }
+
+    async fn dispatch_gdb(
+        &mut self,
+        res: Result<usize, std::io::Error>,
+        gdb: &mut GdbSession,
+        buf: &[u8],
+        con: &mut (dyn AsyncWrite + Unpin),
+    ) -> Result<bool, ProgramError> {
+        // Check status.
+        let len = res.map_err(ProgramError::ReadDebuggerSocket)?;
+
+        if len == 0 {
+            return Ok(false);
+        }
+
+        // Dispatch the requests.
+        let mut dis = gdb.dispatch_client(&buf[..len], self);
+
+        while let Some(res) = dis
+            .pump()
+            .await
+            .map_err(|e| ProgramError::DispatchDebugger(Box::new(e)))?
+        {
+            let res = res.as_ref();
+
+            if !res.is_empty() {
+                con.write_all(res)
+                    .await
+                    .map_err(ProgramError::WriteDebuggerSocket)?;
+            }
         }
 
         Ok(true)

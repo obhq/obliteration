@@ -204,6 +204,7 @@ impl<'a> Future for Run<'a> {
         let mut queue = self.0.queue.borrow_mut();
         let mut state = self.0.state.borrow_mut();
 
+        // https://github.com/rust-lang/rust/issues/156657
         ready!(queue.poll_dispatch_pending(cx, &mut state)).unwrap();
 
         // SAFETY: The Ok from from poll_dispatch_pending is Infallible, which mean it is impossible
