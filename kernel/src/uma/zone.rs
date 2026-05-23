@@ -271,7 +271,7 @@ impl<T> UmaZone<T> {
                 if self.bucket_enable.load(Ordering::Relaxed) {
                     // Get allocation flags. On Orbis it will remove M_ZERO from the flags but we do
                     // the opposite to eliminate the chance of dangling pointer in bucket items.
-                    let mut flags = flags;
+                    let mut flags = flags | Alloc::Zero;
 
                     if self.flags.has_any(UmaFlags::CacheOnly) {
                         flags |= Alloc::NoVm;
@@ -350,7 +350,7 @@ impl<T> UmaZone<T> {
             if self.init.is_none_or(|f| f(item, self.size, flags)) {
                 if self.ctor.is_none_or(|f| f(item, self.size, flags)) {
                     if flags.has_any(Alloc::Zero) {
-                        todo!()
+                        unsafe { item.write_bytes(0, self.size.get()) };
                     }
 
                     return item;
