@@ -116,7 +116,7 @@ impl PhysAllocator {
         loop {
             let mut l = self.lookup_lists[flind].lock();
 
-            if let Some(v) = self.alloc_freelist(pages, &mut l[vm], pool, order) {
+            if let Some(v) = Self::alloc_freelist(pages, &mut l[vm], pool, order) {
                 return Some(v);
             }
 
@@ -137,7 +137,6 @@ impl PhysAllocator {
     /// |---------|--------|
     /// |PS4 11.00|0x1605D0|
     fn alloc_freelist(
-        &self,
         pages: &[Arc<VmPage>],
         list: &mut [[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3],
         pool: usize,
@@ -148,11 +147,12 @@ impl PhysAllocator {
             return None;
         }
 
+        // TODO: What is this?
         let mut i = 0;
 
         loop {
-            match list[pool][order + i].first() {
-                Some(v) => v,
+            let p = match list[pool][order + i].first() {
+                Some(v) => v.clone(),
                 None => match (order + i) < 12 {
                     true => {
                         i += 1;
@@ -162,14 +162,27 @@ impl PhysAllocator {
                 },
             };
 
-            todo!()
+            // Remove from queue.
+            let mut ps = p.state.lock();
+
+            list[pool][order + i].shift_remove(&p);
+
+            ps.order = VmPage::FREE_ORDER;
+
+            drop(ps);
+
+            // TODO: Verify if the inlined call here is actually vm_phys_split_pages.
+            Self::split_pages(pages, &mut list[pool], &p, order + i, order);
+
+            return Some(p);
         }
 
+        // TODO: What is this?
         let mut next = 11;
 
         loop {
             for f in list.iter_mut() {
-                let mut i = next + 1;
+                let i = next + 1;
 
                 if let Some(p) = f[i].first().cloned() {
                     // Remove from queue.
@@ -189,17 +202,7 @@ impl PhysAllocator {
                         p.state.lock().pool = pool;
                     }
 
-                    while i > order {
-                        i -= 1;
-
-                        // TODO: What is this?
-                        let buddy = &pages[p.index + (1 << i)];
-                        let mut ps = buddy.state.lock();
-
-                        ps.order = i;
-
-                        assert!(list[pool][i].shift_insert(0, buddy.clone()));
-                    }
+                    Self::split_pages(pages, &mut list[pool], &p, i, order);
 
                     return Some(p);
                 }
@@ -213,6 +216,32 @@ impl PhysAllocator {
         }
 
         None
+    }
+
+    /// See `vm_phys_split_pages` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1607E5|
+    fn split_pages(
+        pages: &[Arc<VmPage>],
+        list: &mut [IndexSet<Arc<VmPage>, FxBuildHasher>; 13],
+        p: &VmPage,
+        mut i: usize,
+        order: usize,
+    ) {
+        while i > order {
+            i -= 1;
+
+            // TODO: What is this?
+            let buddy = &pages[p.index + (1 << i)];
+            let mut ps = buddy.state.lock();
+
+            ps.order = i;
+
+            assert!(list[i].shift_insert(0, buddy.clone()));
+        }
     }
 
     /// See `vm_phys_create_seg` on the Orbis for a reference.
