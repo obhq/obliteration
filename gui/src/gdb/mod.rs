@@ -74,7 +74,6 @@ mod state;
 #[derive(Default)]
 pub struct GdbSession {
     req: Vec<u8>,
-    res: Vec<u8>,
     state: SessionState,
 }
 
