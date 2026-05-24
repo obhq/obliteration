@@ -22,6 +22,7 @@ use futures::{
 use hv::{DebugEvent, Hypervisor};
 use slint::{ComponentHandle, SharedString, ToSharedString};
 use std::cell::{Cell, RefMut};
+use std::io::IoSlice;
 use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::PathBuf;
@@ -912,17 +913,33 @@ impl<H: Hypervisor> Context<H> {
         // Dispatch the requests.
         let mut dis = gdb.dispatch_client(&buf[..len], self);
 
-        while let Some(res) = dis
+        while let Some((head, body, tail)) = dis
             .pump()
             .await
             .map_err(|e| ProgramError::DispatchDebugger(Box::new(e)))?
         {
-            let res = res.as_ref();
+            if head.is_empty() {
+                continue;
+            }
 
-            if !res.is_empty() {
-                con.write_all(res)
+            // Send the whole response.
+            let mut sent = 0;
+            let len = head.len() + body.len() + tail.len();
+            let mut iov: &mut [_] = &mut [
+                IoSlice::new(&head),
+                IoSlice::new(&body),
+                IoSlice::new(&tail),
+            ];
+
+            while sent != len {
+                let n = con
+                    .write_vectored(iov)
                     .await
                     .map_err(ProgramError::WriteDebuggerSocket)?;
+
+                IoSlice::advance_slices(&mut iov, n);
+
+                sent += n;
             }
         }
 

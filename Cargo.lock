@@ -1619,6 +1619,7 @@ version = "0.1.0"
 dependencies = [
  "aarch64",
  "anstyle-parse",
+ "arrayvec",
  "ash 0.37.3+1.3.251",
  "ashpd",
  "async-net",
