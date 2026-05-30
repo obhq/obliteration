@@ -24,6 +24,8 @@ pub struct KernelMap {
     pub kern_vsize: NonZero<usize>,
     /// Virtual address of physical address 0.
     pub phys_vaddr: usize,
+    /// Size of physical address mapped at [Self::phys_vaddr].
+    pub phys_vsize: NonZero<usize>,
 }
 
 /// Contains information about the boot environment.

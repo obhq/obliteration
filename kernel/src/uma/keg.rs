@@ -2,7 +2,7 @@ use super::arch::small_alloc;
 use super::{Alloc, FreeItem, Slab, SlabHdr, Uma, UmaFlags};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::lock::Mutex;
-use crate::vm::Vm;
+use crate::vm::{Vm, kaddr_to_phys};
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::alloc::Layout;
@@ -287,8 +287,14 @@ impl<T: FreeItem> UmaKeg<T> {
                 // to be useless since we only be here when it does not contains UMA_ZONE_OFFPAGE.
                 let hdr = unsafe { mem.byte_add(self.pgoff).cast::<SlabHdr<T>>() };
 
-                if self.flags.has_any(UmaFlags::VToSlab) && self.ppera != 0 {
-                    todo!()
+                if self.flags.has_any(UmaFlags::VToSlab) {
+                    let next = mem as usize;
+
+                    for _ in 0..self.ppera {
+                        unsafe { kaddr_to_phys(next) };
+
+                        todo!()
+                    }
                 }
 
                 // TODO: I'm not confident about the memory layout here. The variables calculation

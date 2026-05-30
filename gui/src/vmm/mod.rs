@@ -448,6 +448,7 @@ impl Vmm<()> {
                     kern_vaddr,
                     kern_vsize: (vaddr - kern_vaddr).try_into().unwrap(),
                     phys_vaddr,
+                    phys_vsize: (kern_vaddr - phys_vaddr).try_into().unwrap(),
                 })
         };
 

@@ -1,3 +1,4 @@
+pub use self::arch::*;
 pub use self::object::*;
 pub use self::page::*;
 
