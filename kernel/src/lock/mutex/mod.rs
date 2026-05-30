@@ -25,6 +25,9 @@ impl<T> Mutex<T> {
 
     /// See `_mtx_lock_flags` on the Orbis for a reference.
     ///
+    /// # Panics
+    /// If the mutex already locked by the calling thread.
+    ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
@@ -38,16 +41,18 @@ impl<T> Mutex<T> {
         }
 
         // Take ownership.
-        if self
-            .owning
-            .compare_exchange(
-                MTX_UNOWNED,
-                BorrowedArc::as_ptr(&td) as usize,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            )
-            .is_err()
-        {
+        let new_owner = BorrowedArc::as_ptr(&td) as usize;
+
+        if let Err(p) = self.owning.compare_exchange(
+            MTX_UNOWNED,
+            new_owner,
+            Ordering::Acquire,
+            Ordering::Relaxed,
+        ) {
+            if p == new_owner {
+                panic!("attempt to recursive lock on a mutex");
+            }
+
             todo!()
         }
 

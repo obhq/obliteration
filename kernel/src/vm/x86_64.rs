@@ -1,7 +1,24 @@
 use super::VmPage;
 use crate::config::PAGE_SIZE;
 use core::arch::asm;
-use krt::phys_vaddr;
+use krt::{phys_vaddr, phys_vsize};
+
+/// See `pmap_kextract` on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x1145F0|
+pub unsafe fn kaddr_to_phys(va: usize) -> usize {
+    let dmap = phys_vaddr();
+    let dend = dmap + phys_vsize().get();
+
+    if va >= dmap && va < dend {
+        va - dmap
+    } else {
+        todo!()
+    }
+}
 
 impl VmPage {
     /// See `pagezero` on the Orbis for a reference.
