@@ -5,14 +5,20 @@ use crate::{
 };
 use aarch64::Esr;
 use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
-use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1, HV_REG_X2};
+use applevisor_sys::hv_reg_t::{
+    HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1, HV_REG_X2, HV_REG_X3, HV_REG_X4, HV_REG_X5,
+    HV_REG_X6, HV_REG_X7, HV_REG_X8, HV_REG_X9, HV_REG_X10, HV_REG_X11, HV_REG_X12, HV_REG_X13,
+    HV_REG_X14, HV_REG_X15, HV_REG_X16, HV_REG_X17, HV_REG_X18, HV_REG_X19, HV_REG_X20, HV_REG_X21,
+    HV_REG_X22, HV_REG_X23, HV_REG_X24, HV_REG_X25, HV_REG_X26, HV_REG_X27, HV_REG_X28, HV_REG_X29,
+    HV_REG_X30,
+};
 use applevisor_sys::hv_sys_reg_t::{
     HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
     HV_SYS_REG_TTBR0_EL1, HV_SYS_REG_TTBR1_EL1,
 };
 use applevisor_sys::{
-    hv_reg_t, hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_run, hv_vcpu_set_reg,
-    hv_vcpu_set_sys_reg, hv_vcpu_t,
+    hv_reg_t, hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_get_reg, hv_vcpu_run,
+    hv_vcpu_set_reg, hv_vcpu_set_sys_reg, hv_vcpu_t,
 };
 use std::marker::PhantomData;
 use std::num::NonZero;
@@ -259,7 +265,27 @@ impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
             return Err(self);
         }
 
-        todo!()
+        // Set PC to next instruction.
+        let mut pc = 0;
+
+        assert_eq!(
+            unsafe { hv_vcpu_get_reg(self.0.instance, HV_REG_PC, &mut pc) },
+            0
+        );
+
+        pc += 4;
+
+        assert_eq!(
+            unsafe { hv_vcpu_set_reg(self.0.instance, HV_REG_PC, pc) },
+            0
+        );
+
+        Ok(HvfIo {
+            cpu: self.0,
+            esr: s,
+            addr: e.exception.physical_address.try_into().unwrap(),
+            buf: [0; 8],
+        })
     }
 
     fn into_debug(self) -> Result<Self::Debug, Self> {
@@ -268,21 +294,96 @@ impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
 }
 
 /// Implementation of [`CpuIo`] for Hypervisor Framework.
-pub struct HvfIo<'a, 'b>(&'a mut HvfCpu<'b>);
+pub struct HvfIo<'a, 'b> {
+    cpu: &'a mut HvfCpu<'b>,
+    esr: Esr,
+    addr: usize,
+    buf: [u8; 8],
+}
 
 impl<'a, 'b> CpuIo for HvfIo<'a, 'b> {
     type Cpu = HvfCpu<'b>;
 
     fn addr(&self) -> usize {
-        todo!();
+        self.addr
     }
 
     fn buffer(&mut self) -> IoBuf<'_> {
-        todo!();
+        // Check if we have syndrome information.
+        let iss = self.esr.iss();
+        let isv = (iss >> 24) & 0x1;
+        let wnr = (iss >> 6) & 0x1;
+
+        if isv != 0 {
+            // Get data length.
+            let srt = (iss >> 16) & 0x1F;
+            let len = match (iss >> 22) & 0x3 {
+                0b00 => 1,
+                0b01 => 2,
+                0b10 => 4,
+                0b11 => 8,
+                _ => unreachable!(),
+            };
+
+            // Get register.
+            let reg = match srt {
+                0 => HV_REG_X0,
+                1 => HV_REG_X1,
+                2 => HV_REG_X2,
+                3 => HV_REG_X3,
+                4 => HV_REG_X4,
+                5 => HV_REG_X5,
+                6 => HV_REG_X6,
+                7 => HV_REG_X7,
+                8 => HV_REG_X8,
+                9 => HV_REG_X9,
+                10 => HV_REG_X10,
+                11 => HV_REG_X11,
+                12 => HV_REG_X12,
+                13 => HV_REG_X13,
+                14 => HV_REG_X14,
+                15 => HV_REG_X15,
+                16 => HV_REG_X16,
+                17 => HV_REG_X17,
+                18 => HV_REG_X18,
+                19 => HV_REG_X19,
+                20 => HV_REG_X20,
+                21 => HV_REG_X21,
+                22 => HV_REG_X22,
+                23 => HV_REG_X23,
+                24 => HV_REG_X24,
+                25 => HV_REG_X25,
+                26 => HV_REG_X26,
+                27 => HV_REG_X27,
+                28 => HV_REG_X28,
+                29 => HV_REG_X29,
+                30 => HV_REG_X30,
+                _ => unreachable!(),
+            };
+
+            // Check if write.
+            if wnr != 0 {
+                // Read register value.
+                let mut v = 0;
+
+                assert_eq!(
+                    unsafe { hv_vcpu_get_reg(self.cpu.instance, reg, &mut v) },
+                    0
+                );
+
+                self.buf = v.to_ne_bytes();
+
+                IoBuf::Write(&self.buf[..len])
+            } else {
+                todo!()
+            }
+        } else {
+            todo!()
+        }
     }
 
     fn cpu(&mut self) -> &mut Self::Cpu {
-        self.0
+        self.cpu
     }
 }
 
