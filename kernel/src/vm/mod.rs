@@ -183,6 +183,10 @@ impl Vm {
         Ok(Arc::new(vm))
     }
 
+    pub fn phys_to_page(&self, pa: usize) -> Option<&Arc<VmPage>> {
+        self.phys.phys_to_page(&self.pages, pa)
+    }
+
     /// See `vm_page_alloc` on the Orbis for a reference.
     ///
     /// # Reference offsets

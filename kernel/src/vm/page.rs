@@ -25,6 +25,7 @@ impl VmPage {
             state: Mutex::new(PageState {
                 pool,
                 order: Self::FREE_ORDER,
+                object: None,
                 flags: PageFlags::zeroed(),
                 extended_flags: PageExtFlags::zeroed(),
                 access: PageAccess::zeroed(),
@@ -55,6 +56,7 @@ impl Hash for VmPage {
 pub struct PageState {
     pub pool: usize,                  // pool
     pub order: usize,                 // order
+    pub object: Option<PageObj>,      // object
     pub flags: PageFlags,             // flags
     pub extended_flags: PageExtFlags, // oflags
     pub access: PageAccess,           // aflags
@@ -63,7 +65,7 @@ pub struct PageState {
     pub pindex: usize,                // pindex
 }
 
-/// Value for [VmPage::flags].
+/// Value for [PageState::flags].
 #[bitflag(u8)]
 pub enum PageFlags {
     /// `PG_CACHED`.
@@ -72,7 +74,7 @@ pub enum PageFlags {
     Zero = 0x08,
 }
 
-/// Value for [VmPage::extended_flags].
+/// Value for [PageState::extended_flags].
 #[bitflag(u16)]
 pub enum PageExtFlags {
     /// `VPO_BUSY`.
@@ -81,6 +83,11 @@ pub enum PageExtFlags {
     Unmanaged = 0x0004,
 }
 
-/// Value for [VmPage::access].
+/// Value for [PageState::access].
 #[bitflag(u8)]
 pub enum PageAccess {}
+
+/// Associated object with [VmPage].
+pub enum PageObj {
+    Slab, // TODO: Figure out how to store Slab.
+}

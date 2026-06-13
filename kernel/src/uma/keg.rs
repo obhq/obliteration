@@ -2,7 +2,7 @@ use super::arch::small_alloc;
 use super::{Alloc, FreeItem, Slab, SlabHdr, Uma, UmaFlags};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::lock::Mutex;
-use crate::vm::{Vm, kaddr_to_phys};
+use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::alloc::Layout;
@@ -288,12 +288,21 @@ impl<T: FreeItem> UmaKeg<T> {
                 let hdr = unsafe { mem.byte_add(self.pgoff).cast::<SlabHdr<T>>() };
 
                 if self.flags.has_any(UmaFlags::VToSlab) {
-                    let next = mem as usize;
+                    let mut next = mem as usize;
 
                     for _ in 0..self.ppera {
-                        unsafe { kaddr_to_phys(next) };
+                        let p = unsafe { kaddr_to_phys(next) };
+                        let p = self.vm.phys_to_page(p).unwrap(); // Orbis assume non-null.
+                        let mut s = p.state.lock();
 
-                        todo!()
+                        // The Orbis also set PG_SLAB to vm_page::flags here. AFAIK this flag only
+                        // used to identify the vm_page::object, which mean we don't need this flag
+                        // because our vm_page::object is a Rust enum.
+                        s.object = Some(PageObj::Slab);
+
+                        drop(s);
+
+                        next += PAGE_SIZE.get();
                     }
                 }
 
