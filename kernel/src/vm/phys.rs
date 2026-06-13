@@ -97,6 +97,24 @@ impl PhysAllocator {
         None
     }
 
+    /// See `PHYS_TO_VM_PAGE` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x15FBF0|
+    pub fn phys_to_page<'a>(&self, pages: &'a [Arc<VmPage>], pa: usize) -> Option<&'a Arc<VmPage>> {
+        for s in self.segs.iter() {
+            if pa < s.start || pa >= s.end {
+                continue;
+            }
+
+            return Some(&pages[s.first_page + ((pa - s.start) >> PAGE_SHIFT)]);
+        }
+
+        None
+    }
+
     /// See `vm_phys_alloc_pages` on the Orbis for a reference.
     ///
     /// # Reference offsets
