@@ -47,7 +47,6 @@ struct Whp {
 
 impl Hypervisor for Whp {
     type Cpu<'a> = WhpCpu<'a>;
-    type CpuErr = WhpCpuError;
 
     fn cpu_features(&self) -> &CpuFeats {
         &self.feats

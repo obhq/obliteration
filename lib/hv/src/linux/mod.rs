@@ -328,7 +328,6 @@ struct Kvm {
 
 impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
-    type CpuErr = KvmCpuError;
 
     fn cpu_features(&self) -> &CpuFeats {
         &self.feats

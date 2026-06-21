@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::{
-    Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf, Pstate, Sctlr,
-    Tcr,
+    Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf, Pstate, Ram,
+    Sctlr, Tcr,
 };
 use aarch64::Esr;
 use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
@@ -13,30 +13,30 @@ use applevisor_sys::hv_reg_t::{
     HV_REG_X30,
 };
 use applevisor_sys::hv_sys_reg_t::{
-    HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
+    self, HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
     HV_SYS_REG_TTBR0_EL1, HV_SYS_REG_TTBR1_EL1,
 };
 use applevisor_sys::{
-    hv_reg_t, hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_get_reg, hv_vcpu_run,
-    hv_vcpu_set_reg, hv_vcpu_set_sys_reg, hv_vcpu_t,
+    hv_reg_t, hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_get_reg, hv_vcpu_get_sys_reg,
+    hv_vcpu_run, hv_vcpu_set_reg, hv_vcpu_set_sys_reg, hv_vcpu_t,
 };
-use std::marker::PhantomData;
+use std::convert::Infallible;
 use std::num::NonZero;
 use thiserror::Error;
 
-/// Implementation of [`Cpu`] for Hypervisor Framework.
+/// Implementation of [Cpu] for Hypervisor Framework.
 pub struct HvfCpu<'a> {
+    ram: &'a Ram,
     instance: hv_vcpu_t,
     exit: *const hv_vcpu_exit_t,
-    vm: PhantomData<&'a ()>,
 }
 
 impl<'a> HvfCpu<'a> {
-    pub fn new(instance: hv_vcpu_t, exit: *const hv_vcpu_exit_t) -> Self {
+    pub(super) fn new(ram: &'a Ram, instance: hv_vcpu_t, exit: *const hv_vcpu_exit_t) -> Self {
         Self {
+            ram,
             instance,
             exit,
-            vm: PhantomData,
         }
     }
 }
@@ -56,12 +56,12 @@ impl<'a> Cpu for HvfCpu<'a> {
         = HvfStates<'b, 'a>
     where
         Self: 'b;
-    type GetStatesErr = StatesError;
+    type GetStatesErr = Infallible;
     type Exit<'b>
         = HvfExit<'b, 'a>
     where
         Self: 'b;
-    type TranslateErr = std::io::Error;
+    type TranslateErr = TranslateError;
 
     fn id(&self) -> usize {
         todo!()
@@ -84,8 +84,99 @@ impl<'a> Cpu for HvfCpu<'a> {
         })
     }
 
-    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
-        todo!();
+    fn translate(&self, vaddr: usize) -> Result<usize, Self::TranslateErr> {
+        // Load TCR_EL1.
+        let mut tcr = 0;
+        let r = unsafe { hv_vcpu_get_sys_reg(self.instance, HV_SYS_REG_TCR_EL1, &mut tcr) };
+
+        if let Some(e) = NonZero::new(r) {
+            return Err(TranslateError::ReadSys(HV_SYS_REG_TCR_EL1, e));
+        }
+
+        // Get page table register.
+        let tcr = Tcr::from_bits(tcr);
+        let t0s = 1 << (64 - tcr.t0sz());
+        let t1s = 1 << (64 - tcr.t1sz());
+        let (reg, psz) = if vaddr < t0s {
+            match tcr.tg0() {
+                0b10 => (HV_SYS_REG_TTBR0_EL1, 0x4000),
+                _ => todo!(),
+            }
+        } else if vaddr > (0xFFFFFFFFFFFFFFFF - t1s) {
+            match tcr.tg1() {
+                0b01 => (HV_SYS_REG_TTBR1_EL1, 0x4000),
+                _ => todo!(),
+            }
+        } else {
+            return Err(TranslateError::InvalidAddr);
+        };
+
+        // Load page table register.
+        let mut ttbr = 0;
+        let r = unsafe { hv_vcpu_get_sys_reg(self.instance, reg, &mut ttbr) };
+
+        if let Some(e) = NonZero::new(r) {
+            return Err(TranslateError::ReadSys(reg, e));
+        }
+
+        // Get page table size.
+        let len = match psz {
+            0x4000 => 32 * 8,
+            _ => todo!(),
+        };
+
+        // Get page table.
+        let ttbr = ((ttbr & 0xFFFFFFFFFFE0) >> 5).try_into().unwrap();
+        let (tab, avai) = self.ram.slice(ttbr, len.try_into().unwrap());
+
+        if tab.is_null() || avai != len {
+            return Err(TranslateError::InvalidPageTable(reg, ttbr));
+        }
+
+        // Translate.
+        let tab = tab.cast::<usize>();
+
+        match psz {
+            0x4000 => {
+                // Get level 1 table.
+                let len = (2048 * 8).try_into().unwrap();
+                let lv1 = (vaddr & 0x800000000000) >> 47;
+                let lv1 = unsafe { tab.add(lv1).read() & 0xFFFFFFFFC000 } >> 14;
+                let (tab, avai) = self.ram.slice(lv1, len);
+
+                if tab.is_null() || avai != len.get() {
+                    return Err(TranslateError::InvalidLv1Table(lv1));
+                }
+
+                // Get level 2 table.
+                let tab = tab.cast::<usize>();
+                let lv2 = (vaddr & 0x7FF000000000) >> 36;
+                let lv2 = unsafe { tab.add(lv2).read() & 0xFFFFFFFFC000 } >> 14;
+                let (tab, avai) = self.ram.slice(lv2, len);
+
+                if tab.is_null() || avai != len.get() {
+                    return Err(TranslateError::InvalidLv2Table(lv2));
+                }
+
+                // Get level 3 table.
+                let tab = tab.cast::<usize>();
+                let lv3 = (vaddr & 0xFFE000000) >> 25;
+                let lv3 = unsafe { tab.add(lv3).read() & 0xFFFFFFFFC000 } >> 14;
+                let (tab, avai) = self.ram.slice(lv3, len);
+
+                if tab.is_null() || avai != len.get() {
+                    return Err(TranslateError::InvalidLv3Table(lv3));
+                }
+
+                // Get page descriptor.
+                let tab = tab.cast::<usize>();
+                let desc = (vaddr & 0x1FFC000) >> 14;
+                let desc = unsafe { tab.add(desc).read() };
+
+                Ok((desc & 0xFFFFFFFFC000) | (vaddr & 0x3FFF))
+            }
+            _ => todo!(),
+        }
     }
 }
 
@@ -173,7 +264,7 @@ impl<'a, 'b> CpuCommit for HvfStates<'a, 'b> {
         // Set PSTATE. Hypervisor Framework use CPSR to represent PSTATE.
         let cpu = self.cpu.instance;
         let set_reg = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_reg(cpu, reg, val) }) {
-            Some(v) => Err(StatesError::SetRegister(reg, v)),
+            Some(v) => Err(StatesError::WriteReg(reg, v)),
             None => Ok(()),
         };
 
@@ -183,32 +274,32 @@ impl<'a, 'b> CpuCommit for HvfStates<'a, 'b> {
 
         // Set system registers.
         let set_sys = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_sys_reg(cpu, reg, val) }) {
-            Some(v) => Err(v),
+            Some(v) => Err(StatesError::WriteSys(reg, v)),
             None => Ok(()),
         };
 
         if let State::Dirty(v) = self.mair_el1 {
-            set_sys(HV_SYS_REG_MAIR_EL1, v).map_err(StatesError::SetMairEl1Failed)?;
+            set_sys(HV_SYS_REG_MAIR_EL1, v)?;
         }
 
         if let State::Dirty(v) = self.ttbr0_el1 {
-            set_sys(HV_SYS_REG_TTBR0_EL1, v).map_err(StatesError::SetTtbr0El1Failed)?;
+            set_sys(HV_SYS_REG_TTBR0_EL1, v)?;
         }
 
         if let State::Dirty(v) = self.ttbr1_el1 {
-            set_sys(HV_SYS_REG_TTBR1_EL1, v).map_err(StatesError::SetTtbr1El1Failed)?;
+            set_sys(HV_SYS_REG_TTBR1_EL1, v)?;
         }
 
         if let State::Dirty(v) = self.tcr {
-            set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrFailed)?;
+            set_sys(HV_SYS_REG_TCR_EL1, v)?;
         }
 
         if let State::Dirty(v) = self.sctlr {
-            set_sys(HV_SYS_REG_SCTLR_EL1, v).map_err(StatesError::SetSctlrFailed)?;
+            set_sys(HV_SYS_REG_SCTLR_EL1, v)?;
         }
 
         if let State::Dirty(v) = self.sp_el1 {
-            set_sys(HV_SYS_REG_SP_EL1, v).map_err(StatesError::SetSpEl1Failed)?;
+            set_sys(HV_SYS_REG_SP_EL1, v)?;
         }
 
         // Set general registers.
@@ -409,27 +500,34 @@ pub enum RunError {
     HypervisorFailed(NonZero<hv_return_t>),
 }
 
-/// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
+/// Implementation of [CpuStates::Err].
 #[derive(Debug, Error)]
 pub enum StatesError {
-    #[error("couldn't set SCTLR_EL1")]
-    SetSctlrFailed(NonZero<hv_return_t>),
+    #[error("couldn't write {0:?} (code: {1:#x})")]
+    WriteSys(hv_sys_reg_t, NonZero<hv_return_t>),
 
-    #[error("couldn't set TCR_EL1")]
-    SetTcrFailed(NonZero<hv_return_t>),
+    #[error("couldn't write {0:?} (code: {1:#x})")]
+    WriteReg(hv_reg_t, NonZero<hv_return_t>),
+}
 
-    #[error("couldn't set MAIR_EL1")]
-    SetMairEl1Failed(NonZero<hv_return_t>),
+/// Implementation of [Cpu::TranslateErr].
+#[derive(Debug, Error)]
+pub enum TranslateError {
+    #[error("couldn't read {0:?} (code: {1:#x})")]
+    ReadSys(hv_sys_reg_t, NonZero<hv_return_t>),
 
-    #[error("couldn't set TTBR0_EL1")]
-    SetTtbr0El1Failed(NonZero<hv_return_t>),
+    #[error("invalid address")]
+    InvalidAddr,
 
-    #[error("couldn't set TTBR1_EL1")]
-    SetTtbr1El1Failed(NonZero<hv_return_t>),
+    #[error("invalid initial page table at address {1:#x} from {0:?}")]
+    InvalidPageTable(hv_sys_reg_t, usize),
 
-    #[error("couldn't set SP_EL1")]
-    SetSpEl1Failed(NonZero<hv_return_t>),
+    #[error("invalid level 1 page table at address {0:#x}")]
+    InvalidLv1Table(usize),
 
-    #[error("couldn't set {0:?} (code: {1:#x})")]
-    SetRegister(hv_reg_t, NonZero<hv_return_t>),
+    #[error("invalid level 2 page table at address {0:#x}")]
+    InvalidLv2Table(usize),
+
+    #[error("invalid level 3 page table at address {0:#x}")]
+    InvalidLv3Table(usize),
 }
