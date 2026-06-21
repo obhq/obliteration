@@ -19,7 +19,6 @@ pub trait Hypervisor: Send + Sync + 'static {
     type Cpu<'a>: CpuRun
     where
         Self: 'a;
-    type CpuErr: Error + Send + Sync + 'static;
 
     fn cpu_features(&self) -> &CpuFeats;
     fn ram(&self) -> &Ram;

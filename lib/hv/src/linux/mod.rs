@@ -328,7 +328,6 @@ struct Kvm {
 
 impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
-    type CpuErr = KvmCpuError;
 
     fn cpu_features(&self) -> &CpuFeats {
         &self.feats
@@ -515,7 +514,3 @@ pub enum HvError {
     #[error("couldn't get a pointer to kvm_run")]
     GetKvmRun(#[source] Error),
 }
-
-/// Implementation of [`Hypervisor::CpuErr`].
-#[derive(Debug, Error)]
-pub enum KvmCpuError {}

@@ -126,7 +126,6 @@ impl Drop for Hvf {
 
 impl Hypervisor for Hvf {
     type Cpu<'a> = HvfCpu<'a>;
-    type CpuErr = HvfCpuError;
 
     fn cpu_features(&self) -> &CpuFeats {
         &self.feats
@@ -147,7 +146,7 @@ impl Hypervisor for Hvf {
         let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, self.cpu_config) };
         let cpu = match NonZero::new(ret) {
             Some(e) => return Err(HvError::CreateCpu(e)),
-            None => HvfCpu::new(instance, exit),
+            None => HvfCpu::new(&self.ram, instance, exit),
         };
 
         // Trap debug exception.
@@ -211,10 +210,6 @@ pub enum HvError {
     #[error("couldn't enable debug on a vCPU ({0:#x})")]
     EnableDebug(NonZero<hv_return_t>),
 }
-
-/// Implementation of [`Hypervisor::CpuErr`].
-#[derive(Debug, Error)]
-pub enum HvfCpuError {}
 
 unsafe extern "C" {
     fn os_release(object: *mut std::ffi::c_void);
