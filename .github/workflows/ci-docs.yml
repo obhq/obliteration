@@ -25,6 +25,6 @@ jobs:
         cargo doc -p obkrnl --all-features --document-private-items --no-deps
         mv target/doc site/crates
     - name: Upload artifacts
-      uses: actions/upload-pages-artifact@v3
+      uses: actions/upload-pages-artifact@v5
       with:
         path: site

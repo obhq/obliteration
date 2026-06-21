@@ -514,7 +514,3 @@ pub enum HvError {
     #[error("couldn't get a pointer to kvm_run")]
     GetKvmRun(#[source] Error),
 }
-
-/// Implementation of [`Hypervisor::CpuErr`].
-#[derive(Debug, Error)]
-pub enum KvmCpuError {}
