@@ -326,10 +326,24 @@ impl<T> UmaZone<T> {
                 f |= Alloc::NoWait;
             }
 
+            if self.init.is_some() {
+                todo!()
+            }
+
+            state.fills -= 1;
+
+            if b.hdr.len != 0 {
+                state
+                    .full_buckets
+                    .push_front(unsafe { NonNull::new_unchecked(b) });
+
+                return true;
+            }
+
             todo!()
         }
 
-        true
+        todo!()
     }
 
     /// See `zone_alloc_item` on the Orbis for a reference.
