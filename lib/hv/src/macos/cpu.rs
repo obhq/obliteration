@@ -126,7 +126,7 @@ impl<'a> Cpu for HvfCpu<'a> {
         };
 
         // Get page table.
-        let ttbr = ((ttbr & 0xFFFFFFFFFFE0) >> 5).try_into().unwrap();
+        let ttbr = (ttbr & 0xFFFFFFFFFFE0).try_into().unwrap();
         let (tab, avai) = self.ram.slice(ttbr, len.try_into().unwrap());
 
         if tab.is_null() || avai != len {
@@ -141,7 +141,7 @@ impl<'a> Cpu for HvfCpu<'a> {
                 // Get level 1 table.
                 let len = (2048 * 8).try_into().unwrap();
                 let lv1 = (vaddr & 0x800000000000) >> 47;
-                let lv1 = unsafe { tab.add(lv1).read() & 0xFFFFFFFFC000 } >> 14;
+                let lv1 = unsafe { tab.add(lv1).read() & 0xFFFFFFFFC000 };
                 let (tab, avai) = self.ram.slice(lv1, len);
 
                 if tab.is_null() || avai != len.get() {
@@ -151,7 +151,7 @@ impl<'a> Cpu for HvfCpu<'a> {
                 // Get level 2 table.
                 let tab = tab.cast::<usize>();
                 let lv2 = (vaddr & 0x7FF000000000) >> 36;
-                let lv2 = unsafe { tab.add(lv2).read() & 0xFFFFFFFFC000 } >> 14;
+                let lv2 = unsafe { tab.add(lv2).read() & 0xFFFFFFFFC000 };
                 let (tab, avai) = self.ram.slice(lv2, len);
 
                 if tab.is_null() || avai != len.get() {
@@ -161,7 +161,7 @@ impl<'a> Cpu for HvfCpu<'a> {
                 // Get level 3 table.
                 let tab = tab.cast::<usize>();
                 let lv3 = (vaddr & 0xFFE000000) >> 25;
-                let lv3 = unsafe { tab.add(lv3).read() & 0xFFFFFFFFC000 } >> 14;
+                let lv3 = unsafe { tab.add(lv3).read() & 0xFFFFFFFFC000 };
                 let (tab, avai) = self.ram.slice(lv3, len);
 
                 if tab.is_null() || avai != len.get() {
