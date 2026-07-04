@@ -1,5 +1,4 @@
 use super::{UmaFlags, UmaKeg};
-use alloc::sync::Arc;
 
 /// Implementation of `uma_slab` and `uma_slab_refcnt`.
 ///
@@ -10,22 +9,25 @@ use alloc::sync::Arc;
 /// some places.
 #[repr(C)]
 pub struct Slab<I> {
-    pub hdr: SlabHdr<I>, // us_head
-    pub free: [I],       // us_freelist
+    pub hdr: SlabHdr, // us_head
+    pub free: [I],    // us_freelist
 }
 
 impl<I> Slab<I> {
     /// See `slab_alloc_item` on the Orbis for a reference.
     ///
+    /// # Safety
+    /// This slab must be allocated from `keg`.
+    ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141FE0|
-    pub fn alloc_item(&mut self) -> *mut u8 {
+    pub unsafe fn alloc_item(&mut self, keg: &UmaKeg<I>) -> *mut u8 {
         self.hdr.free_count -= 1;
 
         if self.hdr.free_count != 0 {
-            let off = self.hdr.first_free * self.hdr.keg.allocated_size();
+            let off = self.hdr.first_free * keg.allocated_size();
 
             return unsafe { self.hdr.items.add(off) };
         }
@@ -35,11 +37,10 @@ impl<I> Slab<I> {
 }
 
 /// Implementation of `uma_slab_head`.
-pub struct SlabHdr<I> {
-    pub keg: Arc<UmaKeg<I>>, // us_keg
-    pub free_count: usize,   // us_freecount
-    pub first_free: usize,   // us_firstfree
-    pub items: *mut u8,      // us_data
+pub struct SlabHdr {
+    pub free_count: usize, // us_freecount
+    pub first_free: usize, // us_firstfree
+    pub items: *mut u8,    // us_data
 }
 
 /// Item in [Slab::free] to represents `uma_slab` structure.
