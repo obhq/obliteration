@@ -21,11 +21,11 @@ pub struct UmaZone<T> {
     bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
     ty: ZoneType,
     size: NonZero<usize>, // uz_size
-    slab: fn(&Self, &mut ZoneState<T>, Option<&Arc<UmaKeg<T>>>, Alloc) -> Option<NonNull<Slab<T>>>, // uz_slab
+    slab: unsafe fn(&mut UmaKeg<T>, Alloc) -> Option<NonNull<Slab<T>>>, // uz_slab
     init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // uz_init
     ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // uz_ctor
-    caches: CpuLocal<RefCell<UmaCache>>,                      // uz_cpu
-    flags: UmaFlags,                                          // uz_flags
+    caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
+    flags: UmaFlags,      // uz_flags
     state: Mutex<ZoneState<T>>,
 }
 
@@ -126,7 +126,7 @@ impl<T: FreeItem> UmaZone<T> {
             caches: CpuLocal::new(|_| RefCell::default()),
             flags,
             state: Mutex::new(ZoneState {
-                kegs: LinkedList::from([Arc::new(keg)]),
+                kegs: LinkedList::from([keg]),
                 full_buckets: VecDeque::default(),
                 free_buckets: VecDeque::default(),
                 alloc_count: 0,
@@ -304,25 +304,24 @@ impl<T> UmaZone<T> {
 
         if state.fills < config().cpu_count().get().into() {
             let n = min(b.items.len(), state.count);
-            let mut k = None;
+            let k = state.kegs.front_mut().unwrap();
             let mut f = flags;
 
             state.fills += 1;
 
             while b.hdr.len < n {
-                let s = match (self.slab)(self, state, k.as_ref(), f) {
+                let s = match unsafe { (self.slab)(k, f) } {
                     Some(v) => v.as_ptr(),
                     None => todo!(),
                 };
 
                 while unsafe { (*s).hdr.free_count != 0 && b.hdr.len < n } {
-                    let i = unsafe { (*s).alloc_item() };
+                    let i = unsafe { (*s).alloc_item(k) };
 
                     b.items[b.hdr.len] = i;
                     b.hdr.len += 1;
                 }
 
-                k = unsafe { Some((*s).hdr.keg.clone()) };
                 f |= Alloc::NoWait;
             }
 
@@ -354,10 +353,11 @@ impl<T> UmaZone<T> {
     /// |PS4 11.00|0x13DD50|
     fn alloc_item(&self, state: &mut ZoneState<T>, flags: Alloc) -> *mut u8 {
         // Get a slab.
-        let slab = (self.slab)(self, state, None, flags);
+        let keg = state.kegs.front_mut().unwrap();
+        let slab = unsafe { (self.slab)(keg, flags) };
 
         if let Some(mut slab) = slab {
-            let item = unsafe { slab.as_mut().alloc_item() };
+            let item = unsafe { slab.as_mut().alloc_item(keg) };
 
             state.alloc_count += 1;
 
@@ -387,17 +387,10 @@ impl<T: FreeItem> UmaZone<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    fn fetch_slab(
-        &self,
-        state: &mut ZoneState<T>,
-        keg: Option<&Arc<UmaKeg<T>>>,
-        flags: Alloc,
-    ) -> Option<NonNull<Slab<T>>> {
-        let keg = keg.unwrap_or(state.kegs.front().unwrap());
-
+    unsafe fn fetch_slab(keg: &mut UmaKeg<T>, flags: Alloc) -> Option<NonNull<Slab<T>>> {
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
-                if let Some(v) = keg.fetch_slab(flags) {
+                if let Some(v) = unsafe { keg.fetch_slab(flags) } {
                     return Some(v);
                 }
 
@@ -413,7 +406,7 @@ impl<T: FreeItem> UmaZone<T> {
 
 /// Contains mutable data for [UmaZone].
 struct ZoneState<T> {
-    kegs: LinkedList<Arc<UmaKeg<T>>>,           // uz_kegs + uz_klink
+    kegs: LinkedList<UmaKeg<T>>,                // uz_kegs + uz_klink
     full_buckets: VecDeque<NonNull<UmaBucket>>, // uz_full_bucket
     free_buckets: VecDeque<NonNull<UmaBucket>>, // uz_free_bucket
     alloc_count: u64,                           // uz_allocs
