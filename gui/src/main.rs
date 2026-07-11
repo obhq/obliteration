@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::gdb::{GdbHandler, GdbSession};
+use self::gdb::{GdbHandler, GdbResult, GdbSession};
 use self::graphics::{GraphicsBuilder, GraphicsError};
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
@@ -912,23 +912,28 @@ impl<H: Hypervisor> Context<H> {
 
         // Dispatch the requests.
         let mut dis = gdb.dispatch_client(&buf[..len], self);
+        let r = loop {
+            let r = match dis
+                .pump()
+                .await
+                .map_err(|e| ProgramError::DispatchDebugger(Box::new(e)))?
+            {
+                GdbResult::Reply(v) => v,
+                GdbResult::Break(v) => break v,
+                GdbResult::Exit => return Ok(false),
+            };
 
-        while let Some((head, body, tail)) = dis
-            .pump()
-            .await
-            .map_err(|e| ProgramError::DispatchDebugger(Box::new(e)))?
-        {
-            if head.is_empty() {
+            if r.head.is_empty() {
                 continue;
             }
 
             // Send the whole response.
             let mut sent = 0;
-            let len = head.len() + body.len() + tail.len();
+            let len = r.head.len() + r.body.len() + r.tail.len();
             let mut iov: &mut [_] = &mut [
-                IoSlice::new(&head),
-                IoSlice::new(&body),
-                IoSlice::new(&tail),
+                IoSlice::new(&r.head),
+                IoSlice::new(&r.body),
+                IoSlice::new(&r.tail),
             ];
 
             while sent != len {
@@ -941,6 +946,12 @@ impl<H: Hypervisor> Context<H> {
 
                 sent += n;
             }
+        };
+
+        if !r.is_empty() {
+            con.write_all(&r)
+                .await
+                .map_err(ProgramError::WriteDebuggerSocket)?;
         }
 
         Ok(true)

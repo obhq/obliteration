@@ -1,7 +1,7 @@
-use super::{GdbError, GdbHandler, GdbSession};
+use super::{GdbError, GdbHandler, GdbReply, GdbResult, GdbSession, PacketResult};
 use arrayvec::ArrayVec;
 
-/// Implementation of [`GdbDispatcher`] to dispatch requests from GDB client.
+/// Provides methods to dispatch requests from GDB.
 pub struct ClientDispatcher<'a, H> {
     session: &'a mut GdbSession,
     handler: &'a mut H,
@@ -12,9 +12,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
         Self { session, handler }
     }
 
-    pub async fn pump(
-        &mut self,
-    ) -> Result<Option<(ArrayVec<u8, 2>, Vec<u8>, ArrayVec<u8, 3>)>, GdbError> {
+    pub async fn pump(&mut self) -> Result<GdbResult, GdbError> {
         // Check if GDB packet.
         let req = &mut self.session.req;
         let state = &mut self.session.state;
@@ -30,10 +28,14 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
 
                 req.drain(..1);
 
-                return Ok(Some(Default::default()));
+                return Ok(GdbResult::Reply(Default::default()));
+            }
+            Some(0x03) => {
+                // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Interrupts.html
+                todo!();
             }
             Some(v) => return Err(GdbError::UnknownPacketPrefix(v)),
-            None => return Ok(None),
+            None => return Ok(GdbResult::Break(Default::default())),
         }
 
         // Check if packet complete.
@@ -44,7 +46,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             .filter(|&e| e <= req.len())
         {
             Some(e) => req.drain(..e),
-            None => return Ok(None),
+            None => return Ok(GdbResult::Break(Default::default())),
         };
 
         // Parse checksum.
@@ -58,11 +60,15 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
                 Some(false) => return Err(GdbError::MissingAck),
                 None => {
                     // TODO: Should we consider this as an invalid packet instead?
-                    let mut h = ArrayVec::new();
+                    let mut head = ArrayVec::new();
 
-                    h.push(b'-'); // Request retransmission.
+                    head.push(b'-'); // Request retransmission.
 
-                    return Ok(Some((h, Vec::new(), ArrayVec::new())));
+                    return Ok(GdbResult::Reply(GdbReply {
+                        head,
+                        body: Vec::new(),
+                        tail: ArrayVec::new(),
+                    }));
                 }
             }
         }
@@ -76,11 +82,15 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
                 Some(true) => return Err(GdbError::InvalidChecksum(checksum, expect)),
                 Some(false) => return Err(GdbError::MissingAck),
                 None => {
-                    let mut h = ArrayVec::new();
+                    let mut head = ArrayVec::new();
 
-                    h.push(b'-'); // Request retransmission.
+                    head.push(b'-'); // Request retransmission.
 
-                    return Ok(Some((h, Vec::new(), ArrayVec::new())));
+                    return Ok(GdbResult::Reply(GdbReply {
+                        head,
+                        body: Vec::new(),
+                        tail: ArrayVec::new(),
+                    }));
                 }
             }
         }
@@ -129,7 +139,8 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "?" => state.parse_stop_reason(self.handler).await,
             "c" | data => state.parse_continue(data, self.handler),
-            "jThreadsInfo" => Ok(Some(Vec::new())),
+            "jThreadsInfo" => Ok(PacketResult::Reply(Vec::new())),
+            "k" => Ok(PacketResult::Exit),
             "m" | data => state.parse_read_memory(data, self.handler, false).await,
             // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "p" | data => state.parse_read_register(data, self.handler).await,
@@ -138,7 +149,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
-            "QEnableErrorStrings" => Ok(Some(Vec::new())),
+            "QEnableErrorStrings" => Ok(PacketResult::Reply(Vec::new())),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qfThreadInfo-packet
             "qfThreadInfo" => state.parse_first_thread_info(self.handler),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
@@ -146,42 +157,46 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
             "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(),
             // The VMM already relocated the kernel.
-            "qOffsets" => Ok(Some(Vec::new())),
+            "qOffsets" => Ok(PacketResult::Reply(Vec::new())),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qregisterinfo-hex-reg-id
             "qRegisterInfo" | reg => state.parse_register_info(reg),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qsThreadInfo-packet
             "qsThreadInfo" => state.parse_subsequent_thread_info(),
             // TODO: What is this?
-            "qStructuredDataPlugins" => Ok(Some(Vec::new())),
+            "qStructuredDataPlugins" => Ok(PacketResult::Reply(Vec::new())),
             // This does not useful to us. See
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qprocessinfo for more details.
-            "qProcessInfo" => Ok(Some(Vec::new())),
+            "qProcessInfo" => Ok(PacketResult::Reply(Vec::new())),
             "QStartNoAckMode" => state.parse_start_no_ack_mode(),
             // It is unclear if qSupported can sent from GDB without additional payload.
             "qSupported" | rest => state.parse_supported(rest),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
             "QThreadSuffixSupported" => state.parse_thread_suffix_supported(),
             // TODO: https://github.com/obhq/obliteration/issues/1398
-            "qVAttachOrWaitSupported" => Ok(Some(Vec::new())),
+            "qVAttachOrWaitSupported" => Ok(PacketResult::Reply(Vec::new())),
             "vCont?" => state.parse_vcont(),
             "x" | data => state.parse_read_memory(data, self.handler, true).await,
         }
 
-        // Get checksum.
-        let mut tail = ArrayVec::new();
+        // Get response body.
         let body = match body {
-            Some(v) => v,
-            None => return Ok(Some((head, Vec::new(), tail))),
+            PacketResult::Reply(v) => v,
+            PacketResult::Break => return Ok(GdbResult::Break(head)),
+            PacketResult::Exit => return Ok(GdbResult::Exit),
         };
 
+        // Get checksum.
+        let mut tail = [b'#', 0, 0];
+
         head.push(b'$');
-        tail.push(b'#');
-        tail.push(0);
-        tail.push(0);
 
         hex::encode_to_slice([Self::get_checksum(&body)], &mut tail[1..]).unwrap();
 
-        Ok(Some((head, body, tail)))
+        Ok(GdbResult::Reply(GdbReply {
+            head,
+            body,
+            tail: tail.into(),
+        }))
     }
 
     fn get_checksum(data: &[u8]) -> u8 {
