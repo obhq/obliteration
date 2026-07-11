@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub use self::handler::*;
 
+pub(self) use self::state::*;
+
 use self::arch::*;
 use self::client::ClientDispatcher;
-use self::state::SessionState;
+use arrayvec::ArrayVec;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
 
@@ -148,6 +150,21 @@ impl Display for RegisterFormat {
             Self::Hex => "hex",
         })
     }
+}
+
+/// Contains information for a success call to [ClientDispatcher::pump()].
+pub enum GdbResult {
+    Reply(GdbReply),
+    Break(ArrayVec<u8, 2>),
+    Exit,
+}
+
+/// Contains reply for a GDB packet.
+#[derive(Default)]
+pub struct GdbReply {
+    pub head: ArrayVec<u8, 2>,
+    pub body: Vec<u8>,
+    pub tail: ArrayVec<u8, 3>,
 }
 
 /// Represents an error when [ClientDispatcher::pump()] fails.

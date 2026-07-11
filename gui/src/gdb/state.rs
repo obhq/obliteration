@@ -16,12 +16,10 @@ impl SessionState {
         self.no_ack
     }
 
-    pub fn parse_start_no_ack_mode(
-        &mut self,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    pub fn parse_start_no_ack_mode(&mut self) -> Result<PacketResult, Box<dyn std::error::Error>> {
         self.no_ack = Some(false);
 
-        Ok(Some(b"OK".into()))
+        Ok(PacketResult::Reply(b"OK".into()))
     }
 
     pub fn parse_ack_no_ack(&mut self) {
@@ -31,7 +29,7 @@ impl SessionState {
     pub fn parse_supported(
         &mut self,
         req: &[u8],
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // Push features that we always supported.
         let mut res = Vec::with_capacity(256);
 
@@ -40,7 +38,7 @@ impl SessionState {
         // Parse GDB features.
         let req = match req.strip_prefix(b":") {
             Some(v) => v,
-            None => return Ok(Some(res)),
+            None => return Ok(PacketResult::Reply(res)),
         };
 
         for feat in req.split(|&b| b == b';') {
@@ -78,26 +76,26 @@ impl SessionState {
             }
         }
 
-        Ok(Some(res))
+        Ok(PacketResult::Reply(res))
     }
 
     pub fn parse_thread_suffix_supported(
         &mut self,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         self.thread_suffix_supported = true;
 
-        Ok(Some(b"OK".into()))
+        Ok(PacketResult::Reply(b"OK".into()))
     }
 
     pub fn parse_enable_threads_in_stop_reply(
         &mut self,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         self.threads_in_stop_reply = true;
 
-        Ok(Some(b"OK".into()))
+        Ok(PacketResult::Reply(b"OK".into()))
     }
 
-    pub fn parse_host_info(&mut self) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    pub fn parse_host_info(&mut self) -> Result<PacketResult, Box<dyn std::error::Error>> {
         let mut res = Vec::with_capacity(256);
 
         // https://en.wikipedia.org/wiki/Mach-O
@@ -125,45 +123,51 @@ impl SessionState {
         // It is unlikely for us to support page size other than 16K in a near future.
         res.extend_from_slice(b";vm-page-size:16384");
 
-        Ok(Some(res))
+        Ok(PacketResult::Reply(res))
     }
 
-    pub fn parse_vcont(&mut self) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    pub fn parse_vcont(&mut self) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // Only Continue and Stop is supported at the moment.
-        Ok(Some(b"vCont;c;t".into()))
+        Ok(PacketResult::Reply(b"vCont;c;t".into()))
     }
 
-    pub fn parse_current_thread(&mut self) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
-        Ok(Some(format!("QC{:x}", self.current_thread).into()))
+    pub fn parse_current_thread(&mut self) -> Result<PacketResult, Box<dyn std::error::Error>> {
+        Ok(PacketResult::Reply(
+            format!("QC{:x}", self.current_thread).into(),
+        ))
     }
 
     pub async fn parse_stop_reason<H: GdbHandler>(
         &mut self,
         h: &mut H,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         h.suspend_threads().await?;
 
-        // https://sourceware.org/git/?p=binutils-gdb.git;a=blob;f=include/gdb/signals.def
-        Ok(Some(b"S96".into())) // EXC_BREAKPOINT
+        // We need to use SIGTRAP here otherwise the GDB will resume the kernel without apply the
+        // breakpoints.
+        //
+        // See https://sourceware.org/git/?p=binutils-gdb.git;a=blob;f=include/gdb/signals.def for a
+        // list of signals.
+        Ok(PacketResult::Reply(b"S05".into())) // SIGTRAP
     }
 
     pub fn parse_continue<H: GdbHandler>(
         &mut self,
         req: &[u8],
         h: &mut H,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // TODO: It is unclear if this resume current thread or all threads.
         let addr = if req.is_empty() { None } else { todo!() };
 
         h.resume_thread(self.current_thread, addr)?;
 
-        Ok(None)
+        Ok(PacketResult::Break)
     }
 
     pub fn parse_first_thread_info<H: GdbHandler>(
         &mut self,
         h: &mut H,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // We don't need to do anything special because the hexadecimal already in a big-endian
         // format.
         let mut iter = h.active_threads().into_iter();
@@ -171,32 +175,32 @@ impl SessionState {
 
         match iter.next() {
             Some(v) => write!(res, "m{v:x}").unwrap(),
-            None => return Ok(Some(res)),
+            None => return Ok(PacketResult::Reply(res)),
         }
 
         for id in iter {
             write!(res, ",{id:x}").unwrap();
         }
 
-        Ok(Some(res))
+        Ok(PacketResult::Reply(res))
     }
 
     pub fn parse_subsequent_thread_info(
         &mut self,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
-        Ok(Some(b"l".into())) // No more threads.
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
+        Ok(PacketResult::Reply(b"l".into())) // No more threads.
     }
 
     pub fn parse_register_info(
         &mut self,
         reg: &[u8],
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // Parse register number.
         let reg = Self::parse_hex(reg)
             .ok_or_else(|| format!("unknown register '{}'", String::from_utf8_lossy(reg)))?;
         let reg = match Register::try_from(reg) {
             Ok(v) => v,
-            Err(_) => return Ok(Some(Vec::new())), // No more registers.
+            Err(_) => return Ok(PacketResult::Reply(Vec::new())), // No more registers.
         };
 
         // Build response.
@@ -217,14 +221,14 @@ impl SessionState {
             write!(info, "generic:{v};").unwrap();
         }
 
-        Ok(Some(info.into()))
+        Ok(PacketResult::Reply(info.into()))
     }
 
     pub async fn parse_read_register<H: GdbHandler>(
         &mut self,
         req: &[u8],
         h: &mut H,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // Get target register and thread.
         let (reg, td) = if self.thread_suffix_supported {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
@@ -252,7 +256,7 @@ impl SessionState {
         // Read register.
         let val = Self::read_register(h, td, reg).await?;
 
-        Ok(Some(val.into()))
+        Ok(PacketResult::Reply(val.into()))
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -299,7 +303,7 @@ impl SessionState {
         req: &[u8],
         h: &mut H,
         bin: bool,
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         let mut iter = req.splitn(2, |&b| b == b',');
         let addr = iter.next().unwrap(); // This should always success.
         let len = iter.next().ok_or_else(|| "missing length")?;
@@ -313,8 +317,8 @@ impl SessionState {
         let len = match NonZero::new(len) {
             Some(v) => v,
             None => match bin {
-                true => return Ok(Some(b"b".into())),
-                false => return Ok(Some(Vec::new())),
+                true => return Ok(PacketResult::Reply(b"b".into())),
+                false => return Ok(PacketResult::Reply(Vec::new())),
             },
         };
 
@@ -327,9 +331,9 @@ impl SessionState {
             res.extend_from_slice(b"b");
             res.extend_from_slice(&data);
 
-            Ok(Some(res))
+            Ok(PacketResult::Reply(res))
         } else {
-            Ok(Some(hex::encode(data).into()))
+            Ok(PacketResult::Reply(hex::encode(data).into()))
         }
     }
 
@@ -349,4 +353,11 @@ impl Default for SessionState {
             threads_in_stop_reply: false,
         }
     }
+}
+
+/// Result of processing a GDB packet.
+pub enum PacketResult {
+    Reply(Vec<u8>),
+    Break,
+    Exit,
 }
