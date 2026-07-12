@@ -13,7 +13,7 @@ jobs:
         echo "target=${{ runner.os }}-${{ runner.arch }}-target-${{ hashFiles('Cargo.lock') }}" >> $GITHUB_OUTPUT
       id: cache-keys
     - name: Restore target directory
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: target
         key: ${{ steps.cache-keys.outputs.target }}
@@ -41,7 +41,7 @@ jobs:
         name: obliteration-mac-m1
         path: Obliteration.dmg
     - name: Cache target directory
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: target
         key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}

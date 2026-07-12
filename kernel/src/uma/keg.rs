@@ -16,7 +16,7 @@ pub struct UmaKeg<T> {
     pgoff: usize,                              // uk_pgoff
     ppera: usize,                              // uk_ppera
     ipers: usize,                              // uk_ipers
-    alloc: fn(&Vm, Alloc) -> *mut u8,          // uk_allocf
+    alloc: fn(&'static Vm, Alloc) -> *mut u8,  // uk_allocf
     init: Option<fn()>,                        // uk_init
     max_pages: usize,                          // uk_maxpages
     pages: usize,                              // uk_pages
@@ -216,7 +216,7 @@ impl<T> UmaKeg<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1402F0|
-    fn page_alloc(_: &Vm, _: Alloc) -> *mut u8 {
+    fn page_alloc(_: &'static Vm, _: Alloc) -> *mut u8 {
         todo!()
     }
 }
@@ -276,7 +276,7 @@ impl<T: FreeItem> UmaKeg<T> {
             };
 
             // Allocate.
-            let mem = (self.alloc)(&self.vm, flags);
+            let mem = (self.alloc)(self.vm, flags);
 
             if !mem.is_null() {
                 // The Orbis also check if uk_flags does not contains UMA_ZONE_OFFPAGE, which seems
