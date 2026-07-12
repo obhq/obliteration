@@ -1,6 +1,7 @@
-use crate::config::PAGE_SIZE;
+use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::context::{CpuLocal, current_thread, uma};
 use crate::uma::{Alloc, StdFree, UmaFlags, UmaZone};
+use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -11,8 +12,9 @@ use core::num::NonZero;
 /// Kernel heap that allocate a memory from a virtual memory management system. This struct is a
 /// merge of `malloc_type` and `malloc_type_internal` structure.
 pub struct VmHeap {
-    zones: [Vec<Arc<UmaZone<StdFree>>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
-    stats: CpuLocal<RefCell<Stats>>,                                 // mti_stats
+    vm: &'static Vm,
+    zones: [Vec<Arc<UmaZone<StdFree>>>; PAGE_SHIFT + 1], // kmemsize + kmemzones
+    stats: CpuLocal<RefCell<Stats>>,                     // mti_stats
 }
 
 impl VmHeap {
@@ -27,7 +29,7 @@ impl VmHeap {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1A4B80|
-    pub fn new() -> Self {
+    pub fn new(vm: &'static Vm) -> Self {
         // The possible of maximum alignment that Layout allowed is a bit before the most
         // significant bit of isize (e.g. 0x4000000000000000 on 64 bit system). So we can use
         // "size_of::<usize>() * 8 - 1" to get the size of array for all possible alignment.
@@ -68,6 +70,7 @@ impl VmHeap {
         });
 
         Self {
+            vm,
             zones,
             stats: CpuLocal::new(|_| RefCell::default()),
         }
@@ -133,11 +136,26 @@ impl VmHeap {
         mem
     }
 
+    /// See `free` on the Orbis for a reference.
+    ///
     /// # Safety
-    /// `ptr` must be obtained with [`Self::alloc()`] and `layout` must be the same one that was
+    /// `ptr` must be obtained with [Self::alloc()] and `layout` must be the same one that was
     /// passed to that method.
-    pub unsafe fn dealloc(&self, _: *mut u8, _: Layout) {
-        todo!()
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1A43E0|
+    pub unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
+        let page = (ptr as usize) & !PAGE_MASK.get();
+        let page = unsafe { kaddr_to_phys(page) };
+        let page = self.vm.phys_to_page(page).unwrap(); // Orbis assume the pointer is not null.
+        let ps = page.state.lock();
+        let obj = ps.object.as_ref().unwrap(); // Orbis panic when this is null.
+
+        match obj {
+            PageObj::Slab => todo!(),
+        }
     }
 }
 

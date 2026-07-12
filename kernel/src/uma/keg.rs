@@ -3,7 +3,6 @@ use super::{Alloc, FreeItem, Slab, SlabHdr, Uma, UmaFlags};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::collections::vec_deque::VecDeque;
-use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::num::NonZero;
@@ -11,7 +10,7 @@ use core::ptr::NonNull;
 
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg<T> {
-    vm: Arc<Vm>,
+    vm: &'static Vm,
     size: NonZero<usize>,                      // uk_size
     rsize: usize,                              // uk_rsize
     pgoff: usize,                              // uk_pgoff
@@ -38,7 +37,7 @@ impl<T: FreeItem> UmaKeg<T> {
     /// |---------|--------|
     /// |PS4 11.00|0x13CF40|
     pub(super) fn new(
-        vm: Arc<Vm>,
+        vm: &'static Vm,
         size: NonZero<usize>,
         align: usize,
         init: Option<fn()>,

@@ -9,6 +9,7 @@ use crate::context::{config, current_thread};
 use crate::dmem::Dmem;
 use crate::lock::Mutex;
 use crate::proc::Proc;
+use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cmp::max;
@@ -46,7 +47,7 @@ impl Vm {
         phys_avail: [usize; 61],
         ma: Option<&MemAffinity>,
         dmem: &Dmem,
-    ) -> Result<Arc<Self>, VmError> {
+    ) -> Result<&'static Self, VmError> {
         let phys = PhysAllocator::new(&phys_avail, ma);
 
         // Populate vm_page_array. We do a bit different than Orbis here to be able to make segind
@@ -180,7 +181,7 @@ impl Vm {
         // keep it in the VM subsystem.
         vm.spawn_pagers();
 
-        Ok(Arc::new(vm))
+        Ok(Box::leak(vm.into()))
     }
 
     pub fn phys_to_page(&self, pa: usize) -> Option<&Arc<VmPage>> {

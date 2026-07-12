@@ -275,17 +275,18 @@ fn setup(
     // readability. This also allow us to pass data from one function to another function. See
     // mi_startup function on the Orbis for a reference.
     let pmgr = ProcMgr::new();
+    let (vm, uma) = init_vm(phys_avail, &dmem);
 
-    setup.set_uma(init_vm(phys_avail, &dmem)); // 161 on PS4 11.00.
+    setup.set_uma(uma); // 161 on PS4 11.00.
 
-    SetupResult { pmgr }
+    SetupResult { pmgr, vm }
 }
 
 fn run(sr: SetupResult) -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
-    unsafe { KERNEL_HEAP.activate_stage2() };
+    unsafe { KERNEL_HEAP.activate_stage2(sr.vm) };
 
     // Run remaining sysinit vector.
     create_init(&sr); // 659 on PS4 11.00.
@@ -493,12 +494,12 @@ fn adjust_boot_area(original: usize) -> BootInfo {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
-fn init_vm(phys_avail: [usize; 61], dmem: &Dmem) -> Arc<Uma> {
+fn init_vm(phys_avail: [usize; 61], dmem: &Dmem) -> (&'static Vm, Arc<Uma>) {
     // TODO: Get ma from parse_srat.
     let vm = Vm::new(phys_avail, None, dmem).unwrap();
 
     // Initialize UMA.
-    Uma::new(vm)
+    (vm, Uma::new(vm))
 }
 
 /// See `create_init` function on the Orbis for a reference.
@@ -556,6 +557,7 @@ impl ProcAbi for Proc0Abi {
 /// Result of [`setup()`].
 struct SetupResult {
     pmgr: Arc<ProcMgr>,
+    vm: &'static Vm,
 }
 
 /// Contains memory information populated from memory map.

@@ -23,9 +23,60 @@ The project logo and icon was designed by [VocalFan](https://github.com/VocalFan
 
 ## Status
 
-Currently we cannot run any games yet. What we have is a working [64-bit](https://en.wikipedia.org/wiki/Long_mode) kernel and the VMM to run it. The kernel has been successfully setup [GDT](https://en.wikipedia.org/wiki/Global_Descriptor_Table), [TSS](https://en.wikipedia.org/wiki/Task_state_segment), [IDT](https://en.wikipedia.org/wiki/Interrupt_descriptor_table) and [syscall](https://en.wikipedia.org/wiki/System_call) instruction. Right now we are working on [UMA](https://man.freebsd.org/cgi/man.cgi?query=uma) system. Once this finished we will start migrating code from our [legacy user-mode kernel](https://github.com/obhq/obliteration/tree/main/legacy/src) then execute `mini-syscore.elf`.
+Currently we cannot run any games yet. What we have is a working [64-bit](https://en.wikipedia.org/wiki/Long_mode) kernel and the VMM to run it. The kernel has been successfully setup [GDT](https://en.wikipedia.org/wiki/Global_Descriptor_Table), [TSS](https://en.wikipedia.org/wiki/Task_state_segment), [IDT](https://en.wikipedia.org/wiki/Interrupt_descriptor_table) and [syscall](https://en.wikipedia.org/wiki/System_call) instruction and the virtual memory system now mostly usable. Right now we are working on launching `mini-syscore.elf`.
 
-The reason it take so long is because we try to implement the kernel without stubbing as much as possible.
+The reason it take so long is because we try to implement our kernel without stubbing as much as possible. The hard parts is not writing the code but to understand how the PlayStation 4 kernel is working precisely. The following are the logs from our kernel at July 12, 2026:
+
+```
+[I]: Starting Obliteration Kernel on KVM (x86_64 7.0.13-arch1-2).
+     cpu_vendor                 : AuthenticAMD × 8
+     cpu_id                     : 0x740f30
+     boot_parameter.idps.product: UC2/USA/CANADA
+     physfree                   : 0x21a4000
+     kernel/src/main.rs:57
+[I]: Memory map loaded with 2 maps.
+     initial_memory_size: 8554659840 (8.55 GB)
+     basemem            : 0x280
+     boot_address       : 0x9c000
+     mptramp_pagetables : 0x90000
+     Maxmem             : 0x80000
+     0x0000000000000000-0x0000000000090000 (589.82 kB)
+     0x0000000002244000-0x0000000200000000 (8.55 GB)
+     kernel/src/main.rs:120
+[I]: DMEM initialized.
+     Mode  : 20 (GL8 release)
+     Maxmem: 0x80000
+     0x0000000000000000-0x0000000000090000 (589.82 kB)
+     0x0000000002244000-0x0000000060000000 (1.57 GB)
+     0x00000001b8000000-0x00000001fd600000 (1.16 GB)
+     0x00000001ff000000-0x0000000200000000 (16.78 MB)
+     kernel/src/main.rs:147
+[I]: Available physical memory populated.
+     Maxmem    : 0x80000
+     physmem   : 168210
+     phys_avail:
+     0x0000000000004000-0x0000000000090000 (573.44 kB)
+     0x0000000002244000-0x0000000060000000 (1.57 GB)
+     0x00000001b8000000-0x00000001fd600000 (1.16 GB)
+     0x00000001ff000000-0x00000001ffff0000 (16.71 MB)
+     dump_avail:
+     0x0000000000000000-0x0000000000090000 (589.82 kB)
+     0x0000000002244000-0x0000000060000000 (1.57 GB)
+     0x00000001b8000000-0x00000001fd600000 (1.16 GB)
+     0x00000001ff000000-0x0000000200000000 (16.78 MB)
+     kernel/src/main.rs:257
+[I]: VM stats initialized.
+     v_page_count[0]: 102670
+     v_free_count[0]: 102670
+     v_page_count[1]: 65536
+     kernel/src/vm/mod.rs:115
+[I]: Activating stage 2 heap.
+     kernel/src/main.rs:286
+[I]: Creating init process.
+     kernel/src/main.rs:514
+[E]: Kernel panic - not yet implemented.
+     kernel/src/proc/process.rs:42
+```
 
 ## Key features
 

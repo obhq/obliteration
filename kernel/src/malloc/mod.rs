@@ -1,6 +1,7 @@
 use self::vm::VmHeap;
 use crate::context::current_thread;
 use crate::lock::Mutex;
+use crate::vm::Vm;
 use alloc::boxed::Box;
 use core::alloc::{GlobalAlloc, Layout};
 use core::cell::{RefCell, UnsafeCell};
@@ -44,9 +45,9 @@ impl KernelHeap {
 
     /// # Safety
     /// This must be called by main CPU and can be called only once.
-    pub unsafe fn activate_stage2(&self) {
+    pub unsafe fn activate_stage2(&self, vm: &'static Vm) {
         // Setup VM  heap using primitive heap.
-        let vm = Box::new(VmHeap::new());
+        let vm = Box::new(VmHeap::new(vm));
 
         // What we are doing here is highly unsafe. Do not edit the code after this unless you know
         // what you are doing!
