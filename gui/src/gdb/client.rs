@@ -121,6 +121,16 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
                     parse!($($rem)*);
                 }
             };
+            ($prefix:literal | _ => $body:expr, $($rem:tt)*) => {
+                if data.strip_prefix($prefix.as_bytes()).is_some() {
+                    match $body {
+                        Ok(v) => body = v,
+                        Err(e) => return Err(GdbError::Parse($prefix, e)),
+                    }
+                } else {
+                    parse!($($rem)*);
+                }
+            };
             ($prefix:literal | $data:ident => $body:expr, $($rem:tt)*) => {
                 if let Some($data) = data.strip_prefix($prefix.as_bytes()) {
                     match $body {
@@ -138,6 +148,8 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "?" => state.parse_stop_reason(self.handler).await,
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#m-size-permissions.
+            "_M" | _ => Ok(PacketResult::Reply(Vec::new())), // Empty response for unimplemented.
             "c" | data => state.parse_continue(data, self.handler),
             "jThreadsInfo" => Ok(PacketResult::Reply(Vec::new())),
             "k" => Ok(PacketResult::Exit),
