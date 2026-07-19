@@ -9,7 +9,7 @@ use krt::phys_vaddr;
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x22FD70|
-pub fn small_alloc(vm: &Vm, flags: Alloc) -> *mut u8 {
+pub fn small_alloc(vm: &'static Vm, flags: Alloc) -> *mut u8 {
     // TODO: Figure out the name of this static variable. Also the Orbis does not use atomic
     // operation here.
     static UNK: AtomicUsize = AtomicUsize::new(0);

@@ -40,7 +40,7 @@ impl<T: FreeItem> UmaZone<T> {
     /// |PS4 11.00|0x13D490|
     #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub(super) fn new(
-        vm: Arc<Vm>,
+        vm: &'static Vm,
         bucket_enable: Arc<AtomicBool>,
         bucket_keys: Arc<Vec<usize>>,
         bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
