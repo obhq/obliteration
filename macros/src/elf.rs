@@ -101,7 +101,7 @@ pub fn transform_note(opts: Options, mut item: ItemStatic) -> syn::Result<TokenS
     // Compose.
     Ok(quote! {
         #[used]
-        #[cfg_attr(not(test), unsafe(link_section = #section))]
+        #[cfg_attr(target_os = "none", unsafe(link_section = #section))]
         #item
     })
 }
