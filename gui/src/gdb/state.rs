@@ -33,7 +33,7 @@ impl SessionState {
         // Push features that we always supported.
         let mut res = Vec::with_capacity(256);
 
-        res.extend_from_slice(b"QStartNoAckMode+");
+        res.extend_from_slice(b"QStartNoAckMode+;swbreak+");
 
         // Parse GDB features.
         let req = match req.strip_prefix(b":") {
@@ -51,15 +51,7 @@ impl SessionState {
                 // TODO: Maybe we can use this feature to debug both kernel and userspace process at
                 // the same time?
                 ["multiprocess", _data] => {},
-                ["swbreak", v] => {
-                    if v == b"+" {
-                        if cfg!(target_arch = "aarch64") || cfg!(target_arch = "x86_64") {
-                            res.extend_from_slice(b";swbreak+");
-                        } else {
-                            todo!()
-                        }
-                    }
-                },
+                ["swbreak", _data] => {},
                 // TODO: Same here.
                 ["vfork-events", _data] => {},
                 ["xmlRegisters=", _data] => {
@@ -335,6 +327,22 @@ impl SessionState {
         } else {
             Ok(PacketResult::Reply(hex::encode(data).into()))
         }
+    }
+
+    pub async fn parse_insert_software_breakpoint<H: GdbHandler>(
+        &mut self,
+        req: &[u8],
+        h: &mut H,
+    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
+        let mut iter = req.splitn(3, |&b| b == b',').skip(1); // Skip trailing "," after Z0.
+        let addr = iter.next().ok_or_else(|| "missing addr")?;
+        let addr = Self::parse_hex(addr).ok_or_else(|| "invalid addr")?;
+        let kind = iter.next().ok_or_else(|| "missing kind")?;
+        let kind = Self::parse_hex(kind).ok_or_else(|| "invalid kind")?;
+
+        h.insert_software_breakpoint(addr, kind).await?;
+
+        Ok(PacketResult::Reply("OK".into()))
     }
 
     fn parse_hex(v: &[u8]) -> Option<usize> {

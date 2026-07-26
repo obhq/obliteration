@@ -188,6 +188,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             "qVAttachOrWaitSupported" => Ok(PacketResult::Reply(Vec::new())),
             "vCont?" => state.parse_vcont(),
             "x" | data => state.parse_read_memory(data, self.handler, true).await,
+            "Z0" | data => state.parse_insert_software_breakpoint(data, self.handler).await,
         }
 
         // Get response body.

@@ -890,7 +890,6 @@ impl<H: Hypervisor> Context<H> {
             #[cfg(target_arch = "x86_64")]
             VmmEvent::RspValue(v) => self.registers.rsp = Some(v),
             VmmEvent::MemoryData(v) => self.memory_data = Some(v),
-            VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
         Ok(true)
@@ -1054,6 +1053,14 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
 
             self.read_vmm().await?;
         }
+    }
+
+    async fn insert_software_breakpoint(
+        &mut self,
+        addr: usize,
+        kind: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        todo!()
     }
 }
 
