@@ -830,10 +830,6 @@ impl<H: Hypervisor> Vmm<H> {
 
                     tx.send(VmmEvent::MemoryData(data));
                 }
-                VmmCommand::TranslateAddress(addr) => match cpu.translate(addr) {
-                    Ok(v) => tx.send(VmmEvent::TranslatedAddress(v)),
-                    Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
-                },
                 VmmCommand::Release(Some(addr)) => {
                     let mut st = cpu.states().map_err(|e| CpuError::GetStates(Box::new(e)))?;
 
@@ -915,7 +911,6 @@ pub enum VmmCommand {
     #[cfg(target_arch = "x86_64")]
     ReadRsp,
     ReadMemory(usize, NonZero<usize>),
-    TranslateAddress(usize),
     Release(Option<usize>),
 }
 
@@ -930,7 +925,6 @@ pub enum VmmEvent {
     #[cfg(target_arch = "x86_64")]
     RspValue(usize),
     MemoryData(Vec<u8>),
-    TranslatedAddress(usize),
 }
 
 /// Represents an error when [`Vmm::new()`] fails.
