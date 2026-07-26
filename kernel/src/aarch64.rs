@@ -24,6 +24,7 @@ pub fn identify_cpu() -> CpuInfo {
         0x50 => "Applied Micro Circuits Corporation".into(),
         0x51 => "Qualcomm Inc".into(),
         0x56 => "Marvell International Ltd".into(),
+        0x61 => "Apple Inc".into(),
         0x69 => "Intel Corporation".into(),
         0xC0 => "Ampere Computing".into(),
         v => format!("Unknown {v:#x}"),
