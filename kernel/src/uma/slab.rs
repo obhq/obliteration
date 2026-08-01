@@ -56,7 +56,7 @@ impl Slab {
             todo!()
         }
 
-        return unsafe { self.hdr.items.add(f * k.allocated_size()) };
+        unsafe { self.hdr.items.add(f * k.allocated_size()) }
     }
 }
 
