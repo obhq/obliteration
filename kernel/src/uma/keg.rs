@@ -1,5 +1,4 @@
-use super::arch::small_alloc;
-use super::{Alloc, FreeItem, Slab, SlabHdr, Uma, UmaFlags};
+use super::{Alloc, Slab, SlabFlags, SlabHdr, Uma, UmaFlags, small_alloc};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::collections::vec_deque::VecDeque;
@@ -9,24 +8,24 @@ use core::num::NonZero;
 use core::ptr::NonNull;
 
 /// Implementation of `uma_keg` structure.
-pub struct UmaKeg<T> {
+pub struct UmaKeg {
     vm: &'static Vm,
-    size: NonZero<usize>,                      // uk_size
-    rsize: usize,                              // uk_rsize
-    pgoff: usize,                              // uk_pgoff
-    ppera: usize,                              // uk_ppera
-    ipers: usize,                              // uk_ipers
-    alloc: fn(&'static Vm, Alloc) -> *mut u8,  // uk_allocf
-    init: Option<fn()>,                        // uk_init
-    max_pages: usize,                          // uk_maxpages
-    pages: usize,                              // uk_pages
-    free: usize,                               // uk_free
-    recurse: u32,                              // uk_recurse
-    partial_slabs: VecDeque<NonNull<Slab<T>>>, // uk_part_slab
-    flags: UmaFlags,                           // uk_flags
+    size: NonZero<usize>,                                  // uk_size
+    rsize: usize,                                          // uk_rsize
+    pgoff: usize,                                          // uk_pgoff
+    ppera: usize,                                          // uk_ppera
+    ipers: usize,                                          // uk_ipers
+    alloc: fn(&'static Vm, Alloc) -> (*mut u8, SlabFlags), // uk_allocf
+    init: Option<fn()>,                                    // uk_init
+    max_pages: usize,                                      // uk_maxpages
+    pages: usize,                                          // uk_pages
+    pub(super) free: usize,                                // uk_free
+    recurse: u32,                                          // uk_recurse
+    partial_slabs: VecDeque<NonNull<Slab>>,                // uk_part_slab
+    flags: UmaFlags,                                       // uk_flags
 }
 
-impl<T: FreeItem> UmaKeg<T> {
+impl UmaKeg {
     /// `align` is the actual alignment **minus** one, which mean if you want each item to be 8
     /// bytes alignment this value will be 7.
     ///
@@ -55,11 +54,9 @@ impl<T: FreeItem> UmaKeg<T> {
             flags |= UmaFlags::VToSlab;
         }
 
-        flags |= T::flags();
-
         // Get header layout.
         let hdr = Layout::new::<SlabHdr>();
-        let (mut hdr, off) = hdr.extend(Layout::new::<T>()).unwrap();
+        let (mut hdr, off) = hdr.extend(Layout::new::<u8>()).unwrap();
 
         hdr = hdr.pad_to_align();
 
@@ -187,9 +184,7 @@ impl<T: FreeItem> UmaKeg<T> {
             flags,
         }
     }
-}
 
-impl<T> UmaKeg<T> {
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
@@ -216,19 +211,17 @@ impl<T> UmaKeg<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1402F0|
-    fn page_alloc(_: &'static Vm, _: Alloc) -> *mut u8 {
+    fn page_alloc(_: &'static Vm, _: Alloc) -> (*mut u8, SlabFlags) {
         todo!()
     }
-}
 
-impl<T: FreeItem> UmaKeg<T> {
     /// See `keg_fetch_slab` on the Orbis for a reference.
     ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141E20|
-    pub unsafe fn fetch_slab(&mut self, mut flags: Alloc) -> Option<NonNull<Slab<T>>> {
+    pub unsafe fn fetch_slab(&mut self, mut flags: Alloc) -> Option<NonNull<Slab>> {
         while self.free == 0 {
             if flags.has_any(Alloc::NoVm) {
                 return None;
@@ -243,7 +236,7 @@ impl<T: FreeItem> UmaKeg<T> {
             let slab = self.alloc_slab(flags);
             self.recurse -= 1;
 
-            if let Some(slab) = NonNull::new(slab) {
+            if let Some(slab) = slab {
                 self.partial_slabs.push_front(slab);
                 return Some(slab);
             }
@@ -264,7 +257,7 @@ impl<T: FreeItem> UmaKeg<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
-    fn alloc_slab(&mut self, flags: Alloc) -> *mut Slab<T> {
+    fn alloc_slab(&mut self, flags: Alloc) -> Option<NonNull<Slab>> {
         if self.flags.has_any(UmaFlags::Offpage) {
             todo!()
         } else {
@@ -276,50 +269,27 @@ impl<T: FreeItem> UmaKeg<T> {
             };
 
             // Allocate.
-            let mem = (self.alloc)(self.vm, flags);
+            let (mem, slab_flags) = (self.alloc)(self.vm, flags);
 
             if !mem.is_null() {
                 // The Orbis also check if uk_flags does not contains UMA_ZONE_OFFPAGE, which seems
                 // to be useless since we only be here when it does not contains UMA_ZONE_OFFPAGE.
                 let hdr = unsafe { mem.byte_add(self.pgoff).cast::<SlabHdr>() };
 
-                if self.flags.has_any(UmaFlags::VToSlab) {
-                    let mut next = mem as usize;
-
-                    for _ in 0..self.ppera {
-                        let p = unsafe { kaddr_to_phys(next) };
-                        let p = self.vm.phys_to_page(p).unwrap(); // Orbis assume non-null.
-                        let mut s = p.state.lock();
-
-                        // The Orbis also set PG_SLAB to vm_page::flags here. AFAIK this flag only
-                        // used to identify the vm_page::object, which mean we don't need this flag
-                        // because our vm_page::object is a Rust enum.
-                        s.object = Some(PageObj::Slab);
-
-                        drop(s);
-
-                        next += PAGE_SIZE.get();
-                    }
-                }
-
                 // TODO: I'm not confident about the memory layout here. The variables calculation
                 // during keg construction is very complicated and I don't fully understand it. If
                 // we encounter some memory corruptions then this is likely to be the root of
                 // problem.
-                let v = SlabHdr {
-                    free_count: self.ipers,
-                    first_free: 0,
-                    items: mem,
-                };
-
-                unsafe { hdr.write(v) };
+                unsafe { hdr.write(SlabHdr::new(slab_flags, mem, self.ipers)) };
 
                 // Initialize free items. The offset calculation here should be optimized away.
-                let (_, off) = Layout::new::<SlabHdr>().extend(Layout::new::<T>()).unwrap();
-                let free = unsafe { hdr.byte_add(off).cast::<T>() };
+                let (_, off) = Layout::new::<SlabHdr>()
+                    .extend(Layout::new::<u8>())
+                    .unwrap();
+                let free = unsafe { hdr.byte_add(off).cast::<u8>() };
 
                 for i in 0..self.ipers {
-                    let item = T::new(i);
+                    let item = (i + 1).try_into().unwrap();
 
                     unsafe { free.add(i).write(item) };
                 }
@@ -335,7 +305,31 @@ impl<T: FreeItem> UmaKeg<T> {
                 self.pages += self.ppera;
                 self.free += self.ipers;
 
-                return core::ptr::slice_from_raw_parts_mut(hdr, self.ipers) as *mut Slab<T>;
+                // The Orbis do this before initialize the slab but we move it after initialization
+                // instead.
+                let slab = core::ptr::slice_from_raw_parts_mut(hdr, self.ipers) as *mut Slab;
+                let slab = unsafe { NonNull::new_unchecked(slab) };
+
+                if self.flags.has_any(UmaFlags::VToSlab) {
+                    let mut next = mem as usize;
+
+                    for _ in 0..self.ppera {
+                        let p = unsafe { kaddr_to_phys(next) };
+                        let p = self.vm.phys_to_page(p).unwrap(); // Orbis assume non-null.
+                        let mut s = p.state.lock();
+
+                        // The Orbis also set PG_SLAB to vm_page::flags here. AFAIK this flag only
+                        // used to identify the vm_page::object, which mean we don't need this flag
+                        // because our vm_page::object is a Rust enum.
+                        s.object = Some(PageObj::Slab(slab));
+
+                        drop(s);
+
+                        next += PAGE_SIZE.get();
+                    }
+                }
+
+                return Some(slab);
             }
 
             todo!()

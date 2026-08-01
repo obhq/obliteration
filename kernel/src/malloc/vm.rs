@@ -1,6 +1,6 @@
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::context::{CpuLocal, current_thread, uma};
-use crate::uma::{Alloc, StdFree, UmaFlags, UmaZone};
+use crate::uma::{Alloc, SlabFlags, UmaFlags, UmaZone};
 use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -13,8 +13,8 @@ use core::num::NonZero;
 /// merge of `malloc_type` and `malloc_type_internal` structure.
 pub struct VmHeap {
     vm: &'static Vm,
-    zones: [Vec<Arc<UmaZone<StdFree>>>; PAGE_SHIFT + 1], // kmemsize + kmemzones
-    stats: CpuLocal<RefCell<Stats>>,                     // mti_stats
+    zones: [Vec<Arc<UmaZone>>; PAGE_SHIFT + 1], // kmemsize + kmemzones
+    stats: CpuLocal<RefCell<Stats>>,            // mti_stats
 }
 
 impl VmHeap {
@@ -152,9 +152,14 @@ impl VmHeap {
         let page = self.vm.phys_to_page(page).unwrap(); // Orbis assume the pointer is not null.
         let ps = page.state.lock();
         let obj = ps.object.as_ref().unwrap(); // Orbis panic when this is null.
+        let slab = match obj {
+            PageObj::Slab(s) => unsafe { s.as_ref() },
+        };
 
-        match obj {
-            PageObj::Slab => todo!(),
+        if slab.flags().has_any(SlabFlags::Malloc) {
+            todo!()
+        } else {
+            todo!()
         }
     }
 }

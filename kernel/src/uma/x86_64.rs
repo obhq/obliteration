@@ -1,4 +1,4 @@
-use super::Alloc;
+use super::{Alloc, SlabFlags};
 use crate::vm::{PageFlags, Vm};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use krt::phys_vaddr;
@@ -9,7 +9,7 @@ use krt::phys_vaddr;
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x22FD70|
-pub fn small_alloc(vm: &'static Vm, flags: Alloc) -> *mut u8 {
+pub fn small_alloc(vm: &'static Vm, flags: Alloc) -> (*mut u8, SlabFlags) {
     // TODO: Figure out the name of this static variable. Also the Orbis does not use atomic
     // operation here.
     static UNK: AtomicUsize = AtomicUsize::new(0);
@@ -34,5 +34,8 @@ pub fn small_alloc(vm: &'static Vm, flags: Alloc) -> *mut u8 {
         unsafe { page.fill_with_zeros() };
     }
 
-    (phys_vaddr() + page.addr) as *mut u8
+    (
+        (phys_vaddr() + page.addr) as *mut u8,
+        SlabFlags::Private.into(),
+    )
 }
