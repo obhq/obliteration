@@ -1,5 +1,7 @@
 use crate::lock::Mutex;
+use crate::uma::Slab;
 use core::hash::{Hash, Hasher};
+use core::ptr::NonNull;
 use macros::bitflag;
 
 /// Implementation of `vm_page` structure.
@@ -89,5 +91,8 @@ pub enum PageAccess {}
 
 /// Associated object with [VmPage].
 pub enum PageObj {
-    Slab, // TODO: Figure out how to store Slab.
+    Slab(NonNull<Slab>), // TODO: Find a better way.
 }
+
+unsafe impl Send for PageObj {} // TODO: Remove this.
+unsafe impl Sync for PageObj {} // TODO: Remove this.

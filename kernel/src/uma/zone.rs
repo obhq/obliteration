@@ -1,4 +1,4 @@
-use super::{Alloc, BucketHdr, FreeItem, Slab, StdFree, Uma, UmaBucket, UmaFlags, UmaKeg};
+use super::{Alloc, BucketHdr, Slab, Uma, UmaBucket, UmaFlags, UmaKeg};
 use crate::context::{CpuLocal, config, current_thread};
 use crate::lock::Mutex;
 use crate::vm::Vm;
@@ -15,21 +15,21 @@ use core::ptr::{NonNull, null_mut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Implementation of `uma_zone` structure.
-pub struct UmaZone<T> {
+pub struct UmaZone {
     bucket_enable: Arc<AtomicBool>,
     bucket_keys: Arc<Vec<usize>>,
-    bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
+    bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
-    size: NonZero<usize>, // uz_size
-    slab: unsafe fn(&mut UmaKeg<T>, Alloc) -> Option<NonNull<Slab<T>>>, // uz_slab
-    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // uz_init
-    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // uz_ctor
-    caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
-    flags: UmaFlags,      // uz_flags
-    state: Mutex<ZoneState<T>>,
+    size: NonZero<usize>,                                         // uz_size
+    slab: unsafe fn(&mut UmaKeg, Alloc) -> Option<NonNull<Slab>>, // uz_slab
+    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,     // uz_init
+    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,     // uz_ctor
+    caches: CpuLocal<RefCell<UmaCache>>,                          // uz_cpu
+    flags: UmaFlags,                                              // uz_flags
+    state: Mutex<ZoneState>,
 }
 
-impl<T: FreeItem> UmaZone<T> {
+impl UmaZone {
     const ALIGN_CACHE: usize = 63; // uma_align_cache
 
     /// See `zone_ctor` on Orbis for a reference.
@@ -43,9 +43,9 @@ impl<T: FreeItem> UmaZone<T> {
         vm: &'static Vm,
         bucket_enable: Arc<AtomicBool>,
         bucket_keys: Arc<Vec<usize>>,
-        bucket_zones: Arc<Vec<UmaZone<StdFree>>>,
+        bucket_zones: Arc<Vec<UmaZone>>,
         name: impl Into<String>,
-        keg: Option<UmaKeg<T>>,
+        keg: Option<UmaKeg>,
         size: NonZero<usize>,
         align: Option<usize>,
         init: Option<fn()>,
@@ -136,9 +136,7 @@ impl<T: FreeItem> UmaZone<T> {
             }),
         }
     }
-}
 
-impl<T> UmaZone<T> {
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
@@ -263,7 +261,7 @@ impl<T> UmaZone<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
-    fn alloc_bucket(&self, state: &mut ZoneState<T>, flags: Alloc) -> bool {
+    fn alloc_bucket(&self, state: &mut ZoneState, flags: Alloc) -> bool {
         // Get bucket.
         let b = match state.free_buckets.front() {
             Some(_) => todo!(),
@@ -315,8 +313,12 @@ impl<T> UmaZone<T> {
                     None => todo!(),
                 };
 
-                while unsafe { (*s).hdr.free_count != 0 && b.hdr.len < n } {
+                while b.hdr.len < n {
                     let i = unsafe { (*s).alloc_item(k) };
+
+                    if i.is_null() {
+                        break;
+                    }
 
                     b.items[b.hdr.len] = i;
                     b.hdr.len += 1;
@@ -351,13 +353,13 @@ impl<T> UmaZone<T> {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DD50|
-    fn alloc_item(&self, state: &mut ZoneState<T>, flags: Alloc) -> *mut u8 {
+    fn alloc_item(&self, state: &mut ZoneState, flags: Alloc) -> *mut u8 {
         // Get a slab.
         let keg = state.kegs.front_mut().unwrap();
         let slab = unsafe { (self.slab)(keg, flags) };
 
-        if let Some(mut slab) = slab {
-            let item = unsafe { slab.as_mut().alloc_item(keg) };
+        if let Some(slab) = slab {
+            let item = unsafe { slab.as_ref().alloc_item(keg) };
 
             state.alloc_count += 1;
 
@@ -378,16 +380,14 @@ impl<T> UmaZone<T> {
 
         todo!()
     }
-}
 
-impl<T: FreeItem> UmaZone<T> {
     /// See `zone_fetch_slab` on the Orbis for a reference.
     ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    unsafe fn fetch_slab(keg: &mut UmaKeg<T>, flags: Alloc) -> Option<NonNull<Slab<T>>> {
+    unsafe fn fetch_slab(keg: &mut UmaKeg, flags: Alloc) -> Option<NonNull<Slab>> {
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
                 if let Some(v) = unsafe { keg.fetch_slab(flags) } {
@@ -405,8 +405,8 @@ impl<T: FreeItem> UmaZone<T> {
 }
 
 /// Contains mutable data for [UmaZone].
-struct ZoneState<T> {
-    kegs: LinkedList<UmaKeg<T>>,                // uz_kegs + uz_klink
+struct ZoneState {
+    kegs: LinkedList<UmaKeg>,                   // uz_kegs + uz_klink
     full_buckets: VecDeque<NonNull<UmaBucket>>, // uz_full_bucket
     free_buckets: VecDeque<NonNull<UmaBucket>>, // uz_free_bucket
     alloc_count: u64,                           // uz_allocs
@@ -415,7 +415,7 @@ struct ZoneState<T> {
     fills: u16,                                 // uz_fills
 }
 
-unsafe impl<T: Send> Send for ZoneState<T> {}
+unsafe impl Send for ZoneState {}
 
 /// Type of [UmaZone].
 #[derive(Clone, Copy)]
