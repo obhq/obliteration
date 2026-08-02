@@ -11,6 +11,8 @@ impl<T> Receiver<T> {
         Self(chan)
     }
 
+    /// # Cancel safety
+    /// This method is cancel safe.
     pub fn recv(&mut self) -> impl Future<Output = Option<T>> + Unpin + '_ {
         Recv {
             chan: &self.0,

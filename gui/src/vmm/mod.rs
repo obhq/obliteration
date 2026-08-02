@@ -607,6 +607,8 @@ impl<H> Vmm<H> {
         None
     }
 
+    /// # Cancel safety
+    /// This method is cancel safe.
     pub async fn recv(&mut self) -> (usize, Option<VmmEvent>) {
         // Prepare futures to poll.
         let mut tasks = Vec::with_capacity(self.cpus.len());
@@ -809,7 +811,7 @@ impl<H: Hypervisor> Vmm<H> {
                 VmmCommand::ReadRip => get_rex!("rip", get_rip, RipValue),
                 #[cfg(target_arch = "x86_64")]
                 VmmCommand::ReadRsp => get_rex!("rsp", get_rsp, RspValue),
-                VmmCommand::ReadMemory(addr, len) => {
+                VmmCommand::ReadMemory { addr, len, resp } => {
                     let addr = cpu
                         .translate(addr)
                         .map_err(move |e| CpuError::TranslateAddr(addr, Box::new(e)))?;
@@ -828,7 +830,7 @@ impl<H: Hypervisor> Vmm<H> {
                         unsafe { data.set_len(avai) };
                     }
 
-                    tx.send(VmmEvent::MemoryData(data));
+                    drop(resp.send(data));
                 }
                 VmmCommand::Release(Some(addr)) => {
                     let mut st = cpu.states().map_err(|e| CpuError::GetStates(Box::new(e)))?;
@@ -910,7 +912,11 @@ pub enum VmmCommand {
     ReadRip,
     #[cfg(target_arch = "x86_64")]
     ReadRsp,
-    ReadMemory(usize, NonZero<usize>),
+    ReadMemory {
+        addr: usize,
+        len: NonZero<usize>,
+        resp: futures::channel::oneshot::Sender<Vec<u8>>,
+    },
     Release(Option<usize>),
 }
 
@@ -924,7 +930,6 @@ pub enum VmmEvent {
     RipValue(usize),
     #[cfg(target_arch = "x86_64")]
     RspValue(usize),
-    MemoryData(Vec<u8>),
 }
 
 /// Represents an error when [`Vmm::new()`] fails.
