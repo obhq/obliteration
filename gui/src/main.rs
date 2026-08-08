@@ -795,7 +795,6 @@ impl App for MainProgram {
             logs,
             pending_bps: Vec::new(),
             registers: RegisterValues::default(),
-            memory_data: None,
         };
 
         loop {
@@ -804,7 +803,7 @@ impl App for MainProgram {
                 v = gdb_read.read(&mut gdb_buf).fuse() => {
                     cx.dispatch_gdb(v, &mut gdb, &gdb_buf, &mut gdb_write).await?
                 }
-                v = cx.vmm.recv().fuse() => cx.dispatch_vmm(v.0, v.1).await?,
+                v = cx.vmm.recv().fuse() => cx.dispatch_vmm(v.0, v.1)?,
             };
 
             if !r {
@@ -822,7 +821,6 @@ struct Context<H> {
     logs: LogWriter,
     pending_bps: Vec<(usize, Option<DebugEvent>)>,
     registers: RegisterValues,
-    memory_data: Option<Vec<u8>>,
 }
 
 impl<H: Hypervisor> Context<H> {
@@ -849,20 +847,18 @@ impl<H: Hypervisor> Context<H> {
         }
     }
 
+    /// # Cancel safety.
+    /// This method is cancel safe.
     async fn read_vmm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (id, ev) = self.vmm.recv().await;
 
-        match self.dispatch_vmm(id, ev).await? {
+        match self.dispatch_vmm(id, ev)? {
             true => Ok(()),
             false => Err("main vCPU was stopped".into()),
         }
     }
 
-    async fn dispatch_vmm(
-        &mut self,
-        cpu: usize,
-        ev: Option<VmmEvent>,
-    ) -> Result<bool, ProgramError> {
+    fn dispatch_vmm(&mut self, cpu: usize, ev: Option<VmmEvent>) -> Result<bool, ProgramError> {
         let ev = match ev {
             Some(v) => v,
             None => {
@@ -889,7 +885,6 @@ impl<H: Hypervisor> Context<H> {
             VmmEvent::RipValue(v) => self.registers.rip = Some(v),
             #[cfg(target_arch = "x86_64")]
             VmmEvent::RspValue(v) => self.registers.rsp = Some(v),
-            VmmEvent::MemoryData(v) => self.memory_data = Some(v),
         }
 
         Ok(true)
@@ -1036,22 +1031,23 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         // Send VMM request.
         let cpu = td.get() - 1;
+        let (tx, mut rx) = futures::channel::oneshot::channel();
+        let cmd = VmmCommand::ReadMemory {
+            addr,
+            len,
+            resp: tx,
+        };
 
-        if self
-            .vmm
-            .send(cpu, VmmCommand::ReadMemory(addr, len))
-            .is_some()
-        {
+        if self.vmm.send(cpu, cmd).is_some() {
             return Err(format!("invalid thread-id '{td}'").into());
         }
 
         // Wait for the value.
         loop {
-            if let Some(v) = self.memory_data.take() {
-                break Ok(v);
+            select_biased! {
+                v = &mut rx => break v.map_err(|v| v.into()),
+                v = self.read_vmm().fuse() => v?,
             }
-
-            self.read_vmm().await?;
         }
     }
 
