@@ -31,6 +31,7 @@ mod imgact;
 mod imgfmt;
 mod lock;
 mod malloc;
+mod mem;
 mod proc;
 mod sched;
 mod signal;

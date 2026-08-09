@@ -1,10 +1,12 @@
 use super::{Alloc, Slab, SlabFlags, SlabHdr, Uma, UmaFlags, small_alloc};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
+use crate::mem::Strong;
 use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::collections::vec_deque::VecDeque;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::num::NonZero;
+use core::pin::Pin;
 use core::ptr::NonNull;
 
 /// Implementation of `uma_keg` structure.
@@ -221,7 +223,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141E20|
-    pub unsafe fn fetch_slab(&mut self, mut flags: Alloc) -> Option<NonNull<Slab>> {
+    pub unsafe fn fetch_slab(&mut self, mut flags: Alloc) -> Option<Pin<Strong<Slab>>> {
         while self.free == 0 {
             if flags.has_any(Alloc::NoVm) {
                 return None;
@@ -237,15 +239,20 @@ impl UmaKeg {
             self.recurse -= 1;
 
             if let Some(slab) = slab {
-                self.partial_slabs.push_front(slab);
-                return Some(slab);
+                // We cannot keep a strong reference to the slab here otherwise the consumer never
+                // be able to drop it.
+                let slab = unsafe { Pin::into_inner_unchecked(slab) };
+
+                self.partial_slabs.push_front(Strong::as_ptr(&slab));
+
+                return Some(unsafe { Pin::new_unchecked(slab) });
             }
 
             flags |= Alloc::NoVm;
         }
 
         if let Some(v) = self.partial_slabs.front().copied() {
-            return Some(v);
+            return Some(unsafe { Pin::new_unchecked(Strong::new(v.as_ptr())) });
         }
 
         todo!()
@@ -257,7 +264,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
-    fn alloc_slab(&mut self, flags: Alloc) -> Option<NonNull<Slab>> {
+    fn alloc_slab(&mut self, flags: Alloc) -> Option<Pin<Strong<Slab>>> {
         if self.flags.has_any(UmaFlags::Offpage) {
             todo!()
         } else {
@@ -308,7 +315,7 @@ impl UmaKeg {
                 // The Orbis do this before initialize the slab but we move it after initialization
                 // instead.
                 let slab = core::ptr::slice_from_raw_parts_mut(hdr, self.ipers) as *mut Slab;
-                let slab = unsafe { NonNull::new_unchecked(slab) };
+                let slab = unsafe { Pin::new_unchecked(Strong::new(slab)) };
 
                 if self.flags.has_any(UmaFlags::VToSlab) {
                     let mut next = mem as usize;
@@ -321,7 +328,7 @@ impl UmaKeg {
                         // The Orbis also set PG_SLAB to vm_page::flags here. AFAIK this flag only
                         // used to identify the vm_page::object, which mean we don't need this flag
                         // because our vm_page::object is a Rust enum.
-                        s.object = Some(PageObj::Slab(slab));
+                        s.object = Some(PageObj::Slab(slab.clone()));
 
                         drop(s);
 

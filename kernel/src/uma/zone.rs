@@ -1,6 +1,7 @@
 use super::{Alloc, BucketHdr, Slab, Uma, UmaBucket, UmaFlags, UmaKeg};
 use crate::context::{CpuLocal, config, current_thread};
 use crate::lock::Mutex;
+use crate::mem::Strong;
 use crate::vm::Vm;
 use alloc::collections::VecDeque;
 use alloc::collections::linked_list::LinkedList;
@@ -11,6 +12,7 @@ use core::cell::RefCell;
 use core::cmp::min;
 use core::num::NonZero;
 use core::ops::DerefMut;
+use core::pin::Pin;
 use core::ptr::{NonNull, null_mut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -20,12 +22,12 @@ pub struct UmaZone {
     bucket_keys: Arc<Vec<usize>>,
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
-    size: NonZero<usize>,                                         // uz_size
-    slab: unsafe fn(&mut UmaKeg, Alloc) -> Option<NonNull<Slab>>, // uz_slab
-    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,     // uz_init
-    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,     // uz_ctor
-    caches: CpuLocal<RefCell<UmaCache>>,                          // uz_cpu
-    flags: UmaFlags,                                              // uz_flags
+    size: NonZero<usize>,                                             // uz_size
+    slab: unsafe fn(&mut UmaKeg, Alloc) -> Option<Pin<Strong<Slab>>>, // uz_slab
+    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,         // uz_init
+    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,         // uz_ctor
+    caches: CpuLocal<RefCell<UmaCache>>,                              // uz_cpu
+    flags: UmaFlags,                                                  // uz_flags
     state: Mutex<ZoneState>,
 }
 
@@ -309,12 +311,12 @@ impl UmaZone {
 
             while b.hdr.len < n {
                 let s = match unsafe { (self.slab)(k, f) } {
-                    Some(v) => v.as_ptr(),
+                    Some(v) => v,
                     None => todo!(),
                 };
 
                 while b.hdr.len < n {
-                    let i = unsafe { (*s).alloc_item(k) };
+                    let i = unsafe { s.alloc_item(k) };
 
                     if i.is_null() {
                         break;
@@ -387,7 +389,7 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    unsafe fn fetch_slab(keg: &mut UmaKeg, flags: Alloc) -> Option<NonNull<Slab>> {
+    unsafe fn fetch_slab(keg: &mut UmaKeg, flags: Alloc) -> Option<Pin<Strong<Slab>>> {
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
                 if let Some(v) = unsafe { keg.fetch_slab(flags) } {
