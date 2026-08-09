@@ -89,6 +89,9 @@ unsafe impl RefCnt for Slab {
     }
 }
 
+unsafe impl Send for Slab {}
+unsafe impl Sync for Slab {}
+
 /// Implementation of `uma_slab_head`.
 pub(super) struct SlabHdr {
     items: *mut u8,   // us_data
