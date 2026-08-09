@@ -153,7 +153,7 @@ impl VmHeap {
         let ps = page.state.lock();
         let obj = ps.object.as_ref().unwrap(); // Orbis panic when this is null.
         let slab = match obj {
-            PageObj::Slab(s) => unsafe { s.as_ref() },
+            PageObj::Slab(s) => s,
         };
 
         if slab.flags().has_any(SlabFlags::Malloc) {

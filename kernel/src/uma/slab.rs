@@ -1,6 +1,9 @@
 use super::UmaKeg;
 use crate::lock::Mutex;
+use crate::mem::{RefCnt, too_many_refs};
+use core::marker::PhantomPinned;
 use core::ptr::null_mut;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use macros::bitflag;
 
 /// Implementation of `uma_slab`.
@@ -17,6 +20,7 @@ use macros::bitflag;
 /// some places.
 #[repr(C)]
 pub struct Slab {
+    pub(super) pin: PhantomPinned,
     pub(super) hdr: SlabHdr, // us_head
     pub(super) free: [u8],   // us_freelist
 }
@@ -56,7 +60,32 @@ impl Slab {
             todo!()
         }
 
+        self.hdr.refs.fetch_add(1, Ordering::Relaxed);
+
         unsafe { self.hdr.items.add(f * k.allocated_size()) }
+    }
+}
+
+impl Drop for Slab {
+    #[inline(never)]
+    fn drop(&mut self) {
+        core::sync::atomic::fence(Ordering::Acquire);
+
+        todo!()
+    }
+}
+
+unsafe impl RefCnt for Slab {
+    fn increase_ref(&self) {
+        let p = self.hdr.refs.fetch_add(1, Ordering::Relaxed);
+
+        if p == usize::MAX {
+            too_many_refs();
+        }
+    }
+
+    fn decrease_ref(&self) -> usize {
+        self.hdr.refs.fetch_sub(1, Ordering::Release)
     }
 }
 
@@ -65,6 +94,7 @@ pub(super) struct SlabHdr {
     items: *mut u8,   // us_data
     flags: SlabFlags, // us_flags
     state: Mutex<SlabState>,
+    refs: AtomicUsize,
 }
 
 impl SlabHdr {
@@ -79,6 +109,7 @@ impl SlabHdr {
                 free_count: len,
                 first_free: 0,
             }),
+            refs: AtomicUsize::new(0),
         }
     }
 }
