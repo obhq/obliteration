@@ -152,9 +152,7 @@ impl VmHeap {
         let page = self.vm.phys_to_page(page).unwrap(); // Orbis assume the pointer is not null.
         let ps = page.state.lock();
         let obj = ps.object.as_ref().unwrap(); // Orbis panic when this is null.
-        let slab = match obj {
-            PageObj::Slab(s) => s,
-        };
+        let PageObj::Slab(slab) = obj;
 
         if slab.flags().has_any(SlabFlags::Malloc) {
             todo!()
