@@ -778,7 +778,6 @@ impl<H: Hypervisor> Vmm<H> {
         mut cmd: Option<VmmCommand>,
     ) -> Result<Option<bool>, CpuError> {
         let rx = &args.receiver;
-        let tx = &args.sender;
 
         loop {
             let cmd = match cmd.take() {
@@ -793,24 +792,24 @@ impl<H: Hypervisor> Vmm<H> {
             };
 
             macro_rules! get_rex {
-                ($name:literal, $method:ident, $value:ident) => {{
+                ($name:literal, $method:ident, $resp:ident) => {{
                     let v = cpu
                         .states()
                         .map_err(|e| CpuError::GetStates(Box::new(e)))?
                         .$method()
                         .map_err(|e| CpuError::ReadReg($name, Box::new(e)))?;
 
-                    tx.send(VmmEvent::$value(v));
+                    $resp.send(v).ok();
                 }};
             }
 
             match cmd {
                 #[cfg(target_arch = "x86_64")]
-                VmmCommand::ReadRax => get_rex!("rax", get_rax, RaxValue),
+                VmmCommand::ReadRax(r) => get_rex!("rax", get_rax, r),
                 #[cfg(target_arch = "x86_64")]
-                VmmCommand::ReadRip => get_rex!("rip", get_rip, RipValue),
+                VmmCommand::ReadRip(r) => get_rex!("rip", get_rip, r),
                 #[cfg(target_arch = "x86_64")]
-                VmmCommand::ReadRsp => get_rex!("rsp", get_rsp, RspValue),
+                VmmCommand::ReadRsp(r) => get_rex!("rsp", get_rsp, r),
                 VmmCommand::ReadMemory { addr, len, resp } => {
                     let addr = cpu
                         .translate(addr)
@@ -907,11 +906,11 @@ struct RamMap {
 #[derive(Debug)]
 pub enum VmmCommand {
     #[cfg(target_arch = "x86_64")]
-    ReadRax,
+    ReadRax(futures::channel::oneshot::Sender<usize>),
     #[cfg(target_arch = "x86_64")]
-    ReadRip,
+    ReadRip(futures::channel::oneshot::Sender<usize>),
     #[cfg(target_arch = "x86_64")]
-    ReadRsp,
+    ReadRsp(futures::channel::oneshot::Sender<usize>),
     ReadMemory {
         addr: usize,
         len: NonZero<usize>,
@@ -924,12 +923,6 @@ pub enum VmmCommand {
 pub enum VmmEvent {
     Log(ConsoleType, String),
     Breakpoint(Option<DebugEvent>),
-    #[cfg(target_arch = "x86_64")]
-    RaxValue(usize),
-    #[cfg(target_arch = "x86_64")]
-    RipValue(usize),
-    #[cfg(target_arch = "x86_64")]
-    RspValue(usize),
 }
 
 /// Represents an error when [`Vmm::new()`] fails.

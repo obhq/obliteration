@@ -794,7 +794,6 @@ impl App for MainProgram {
             vmm,
             logs,
             pending_bps: Vec::new(),
-            registers: RegisterValues::default(),
         };
 
         loop {
@@ -820,30 +819,28 @@ struct Context<H> {
     vmm: Vmm<H>,
     logs: LogWriter,
     pending_bps: Vec<(usize, Option<DebugEvent>)>,
-    registers: RegisterValues,
 }
 
 impl<H: Hypervisor> Context<H> {
-    async fn read_reg<T>(
+    async fn request<T>(
         &mut self,
         td: NonZero<usize>,
-        cmd: VmmCommand,
-        mut f: impl FnMut(&mut RegisterValues) -> &mut Option<T>,
+        f: impl FnOnce(futures::channel::oneshot::Sender<T>) -> VmmCommand,
     ) -> Result<T, Box<dyn std::error::Error>> {
         // Send VMM request.
         let cpu = td.get() - 1;
+        let (tx, mut rx) = futures::channel::oneshot::channel();
 
-        if self.vmm.send(cpu, cmd).is_some() {
+        if self.vmm.send(cpu, f(tx)).is_some() {
             return Err(format!("invalid thread-id '{td}'").into());
         }
 
-        // Wait for the value.
+        // Wait for the response.
         loop {
-            if let Some(v) = f(&mut self.registers).take() {
-                break Ok(v);
+            select_biased! {
+                v = &mut rx => break v.map_err(|v| v.into()),
+                v = self.read_vmm().fuse() => v?,
             }
-
-            self.read_vmm().await?;
         }
     }
 
@@ -879,12 +876,6 @@ impl<H: Hypervisor> Context<H> {
         match ev {
             VmmEvent::Log(t, m) => self.logs.write(t, m),
             VmmEvent::Breakpoint(e) => self.pending_bps.push((cpu, e)),
-            #[cfg(target_arch = "x86_64")]
-            VmmEvent::RaxValue(v) => self.registers.rax = Some(v),
-            #[cfg(target_arch = "x86_64")]
-            VmmEvent::RipValue(v) => self.registers.rip = Some(v),
-            #[cfg(target_arch = "x86_64")]
-            VmmEvent::RspValue(v) => self.registers.rsp = Some(v),
         }
 
         Ok(true)
@@ -1004,7 +995,7 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
         &mut self,
         td: NonZero<usize>,
     ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
-        self.read_reg(td, VmmCommand::ReadRax, |v| &mut v.rax)
+        self.request(td, VmmCommand::ReadRax)
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -1012,7 +1003,7 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
         &mut self,
         td: NonZero<usize>,
     ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
-        self.read_reg(td, VmmCommand::ReadRip, |v| &mut v.rip)
+        self.request(td, VmmCommand::ReadRip)
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -1020,35 +1011,16 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
         &mut self,
         td: NonZero<usize>,
     ) -> impl Future<Output = Result<usize, Box<dyn std::error::Error>>> {
-        self.read_reg(td, VmmCommand::ReadRsp, |v| &mut v.rsp)
+        self.request(td, VmmCommand::ReadRsp)
     }
 
-    async fn read_memory(
+    fn read_memory(
         &mut self,
         td: NonZero<usize>,
         addr: usize,
         len: NonZero<usize>,
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        // Send VMM request.
-        let cpu = td.get() - 1;
-        let (tx, mut rx) = futures::channel::oneshot::channel();
-        let cmd = VmmCommand::ReadMemory {
-            addr,
-            len,
-            resp: tx,
-        };
-
-        if self.vmm.send(cpu, cmd).is_some() {
-            return Err(format!("invalid thread-id '{td}'").into());
-        }
-
-        // Wait for the value.
-        loop {
-            select_biased! {
-                v = &mut rx => break v.map_err(|v| v.into()),
-                v = self.read_vmm().fuse() => v?,
-            }
-        }
+    ) -> impl Future<Output = Result<Vec<u8>, Box<dyn std::error::Error>>> {
+        self.request(td, move |resp| VmmCommand::ReadMemory { addr, len, resp })
     }
 
     async fn insert_software_breakpoint(
@@ -1058,18 +1030,6 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         todo!()
     }
-}
-
-#[cfg(target_arch = "aarch64")]
-#[derive(Default)]
-struct RegisterValues {}
-
-#[cfg(target_arch = "x86_64")]
-#[derive(Default)]
-struct RegisterValues {
-    rax: Option<usize>,
-    rip: Option<usize>,
-    rsp: Option<usize>,
 }
 
 /// Program arguments parsed from command line.
