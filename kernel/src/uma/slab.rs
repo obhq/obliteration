@@ -1,6 +1,7 @@
 use super::UmaKeg;
 use crate::lock::Mutex;
 use crate::mem::{RefCnt, too_many_refs};
+use alloc::sync::Arc;
 use core::marker::PhantomPinned;
 use core::ptr::null_mut;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -30,19 +31,20 @@ impl Slab {
         self.hdr.flags
     }
 
+    /// Each allocated item keep a strong reference to the slab, which mean all allocated item need
+    /// to free manually otherwise the slab (and its keg) will be leak.
+    ///
     /// Unlike Orbis, this method will return null if the slab already full instead of trigger a UB.
     ///
     /// See `slab_alloc_item` on the Orbis for a reference.
-    ///
-    /// # Safety
-    /// This slab must be allocated from `k`.
     ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141FE0|
-    pub unsafe fn alloc_item(&self, k: &mut UmaKeg) -> *mut u8 {
+    pub fn alloc_item(&self) -> *mut u8 {
         // Check if full.
+        let mut k = self.hdr.keg.state().lock();
         let mut s = self.hdr.state.lock();
 
         if s.free_count == 0 {
@@ -62,7 +64,7 @@ impl Slab {
 
         self.hdr.refs.fetch_add(1, Ordering::Relaxed);
 
-        unsafe { self.hdr.items.add(f * k.allocated_size()) }
+        unsafe { self.hdr.items.add(f * self.hdr.keg.allocated_size()) }
     }
 }
 
@@ -94,8 +96,11 @@ unsafe impl Sync for Slab {}
 
 /// Implementation of `uma_slab_head`.
 pub(super) struct SlabHdr {
+    keg: Arc<UmaKeg>, // us_keg
     items: *mut u8,   // us_data
     flags: SlabFlags, // us_flags
+    /// This **MUST** be locked after everything else (e.g. keg state and zone state) otherwise it
+    /// will cause a deadlock.
     state: Mutex<SlabState>,
     refs: AtomicUsize,
 }
@@ -104,8 +109,9 @@ impl SlabHdr {
     /// # Safety
     /// - `items` cannot be null.
     /// - `len` must be a number of elements of the array at `items`.
-    pub unsafe fn new(flags: SlabFlags, items: *mut u8, len: usize) -> Self {
+    pub unsafe fn new(keg: Arc<UmaKeg>, flags: SlabFlags, items: *mut u8, len: usize) -> Self {
         Self {
+            keg,
             items,
             flags,
             state: Mutex::new(SlabState {
@@ -117,7 +123,7 @@ impl SlabHdr {
     }
 }
 
-/// Flags for [SlabHdr].
+/// Flags for [Slab].
 #[bitflag(u8)]
 pub enum SlabFlags {
     /// `UMA_SLAB_PRIV`.
@@ -127,7 +133,7 @@ pub enum SlabFlags {
 }
 
 /// Contains mutable data for [SlabHdr].
-pub(super) struct SlabState {
-    pub(super) free_count: usize, // us_freecount
-    pub(super) first_free: u8,    // us_firstfree
+struct SlabState {
+    free_count: usize, // us_freecount
+    first_free: u8,    // us_firstfree
 }

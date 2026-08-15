@@ -1,13 +1,16 @@
 use super::{Alloc, Slab, SlabFlags, SlabHdr, Uma, UmaFlags, small_alloc};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
+use crate::lock::Mutex;
 use crate::mem::Strong;
 use crate::vm::{PageObj, Vm, kaddr_to_phys};
 use alloc::collections::vec_deque::VecDeque;
+use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::num::NonZero;
 use core::pin::Pin;
 use core::ptr::NonNull;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
@@ -20,11 +23,9 @@ pub struct UmaKeg {
     alloc: fn(&'static Vm, Alloc) -> (*mut u8, SlabFlags), // uk_allocf
     init: Option<fn()>,                                    // uk_init
     max_pages: usize,                                      // uk_maxpages
-    pages: usize,                                          // uk_pages
-    pub(super) free: usize,                                // uk_free
-    recurse: u32,                                          // uk_recurse
-    partial_slabs: VecDeque<NonNull<Slab>>,                // uk_part_slab
+    recurse: AtomicU32,                                    // uk_recurse
     flags: UmaFlags,                                       // uk_flags
+    state: Mutex<KegState>,
 }
 
 impl UmaKeg {
@@ -43,7 +44,7 @@ impl UmaKeg {
         align: usize,
         init: Option<fn()>,
         mut flags: UmaFlags,
-    ) -> Self {
+    ) -> Arc<Self> {
         if flags.has_any(UmaFlags::Vm) {
             todo!()
         }
@@ -169,7 +170,7 @@ impl UmaKeg {
 
         // TODO: Add uk_zones.
         // TODO: Add uma_kegs.
-        Self {
+        Arc::new(Self {
             vm,
             size,
             rsize,
@@ -179,12 +180,14 @@ impl UmaKeg {
             alloc,
             init,
             max_pages: 0,
-            pages: 0,
-            free: 0,
-            recurse: 0,
-            partial_slabs: VecDeque::new(),
+            recurse: AtomicU32::new(0),
             flags,
-        }
+            state: Mutex::new(KegState {
+                pages: 0,
+                free: 0,
+                partial_slabs: VecDeque::new(),
+            }),
+        })
     }
 
     pub fn size(&self) -> NonZero<usize> {
@@ -200,11 +203,16 @@ impl UmaKeg {
     }
 
     pub fn recurse(&self) -> u32 {
-        self.recurse
+        // TODO: Find a better way.
+        self.recurse.load(Ordering::Relaxed)
     }
 
     pub fn flags(&self) -> UmaFlags {
         self.flags
+    }
+
+    pub(super) fn state(&self) -> &Mutex<KegState> {
+        &self.state
     }
 
     /// See `page_alloc` on the Orbis for a reference.
@@ -217,33 +225,38 @@ impl UmaKeg {
         todo!()
     }
 
+    /// Unlike Orbis, our slab contains a strong reference to its keg. That mean you don't need to
+    /// keep the keg alive manually.
+    ///
     /// See `keg_fetch_slab` on the Orbis for a reference.
     ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141E20|
-    pub unsafe fn fetch_slab(&mut self, mut flags: Alloc) -> Option<Pin<Strong<Slab>>> {
-        while self.free == 0 {
+    pub unsafe fn fetch_slab(self: &Arc<Self>, mut flags: Alloc) -> Option<Pin<Strong<Slab>>> {
+        let mut state = self.state.lock();
+
+        while state.free == 0 {
             if flags.has_any(Alloc::NoVm) {
                 return None;
             }
 
             #[allow(clippy::while_immutable_condition)] // TODO: Remove this.
-            while self.max_pages != 0 && self.max_pages <= self.pages {
+            while self.max_pages != 0 && self.max_pages <= state.pages {
                 todo!()
             }
 
-            self.recurse += 1;
-            let slab = self.alloc_slab(flags);
-            self.recurse -= 1;
+            self.recurse.fetch_add(1, Ordering::Relaxed);
+            let slab = self.alloc_slab(&mut state, flags);
+            self.recurse.fetch_sub(1, Ordering::Relaxed);
 
             if let Some(slab) = slab {
                 // We cannot keep a strong reference to the slab here otherwise the consumer never
                 // be able to drop it.
                 let slab = unsafe { Pin::into_inner_unchecked(slab) };
 
-                self.partial_slabs.push_front(Strong::as_ptr(&slab));
+                state.partial_slabs.push_front(Strong::as_ptr(&slab));
 
                 return Some(unsafe { Pin::new_unchecked(slab) });
             }
@@ -251,7 +264,7 @@ impl UmaKeg {
             flags |= Alloc::NoVm;
         }
 
-        if let Some(v) = self.partial_slabs.front().copied() {
+        if let Some(v) = state.partial_slabs.front().copied() {
             return Some(unsafe { Pin::new_unchecked(Strong::new(v.as_ptr())) });
         }
 
@@ -264,7 +277,11 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
-    fn alloc_slab(&mut self, flags: Alloc) -> Option<Pin<Strong<Slab>>> {
+    fn alloc_slab(
+        self: &Arc<Self>,
+        state: &mut KegState,
+        flags: Alloc,
+    ) -> Option<Pin<Strong<Slab>>> {
         if self.flags.has_any(UmaFlags::Offpage) {
             todo!()
         } else {
@@ -287,7 +304,7 @@ impl UmaKeg {
                 // during keg construction is very complicated and I don't fully understand it. If
                 // we encounter some memory corruptions then this is likely to be the root of
                 // problem.
-                unsafe { hdr.write(SlabHdr::new(slab_flags, mem, self.ipers)) };
+                unsafe { hdr.write(SlabHdr::new(self.clone(), slab_flags, mem, self.ipers)) };
 
                 // Initialize free items. The offset calculation here should be optimized away.
                 let (_, off) = Layout::new::<SlabHdr>()
@@ -309,8 +326,8 @@ impl UmaKeg {
                     todo!()
                 }
 
-                self.pages += self.ppera;
-                self.free += self.ipers;
+                state.pages += self.ppera;
+                state.free += self.ipers;
 
                 // The Orbis do this before initialize the slab but we move it after initialization
                 // instead.
@@ -343,3 +360,13 @@ impl UmaKeg {
         }
     }
 }
+
+/// Mutable state of [UmaKeg].
+pub(super) struct KegState {
+    pub(super) pages: usize,                           // uk_pages
+    pub(super) free: usize,                            // uk_free
+    pub(super) partial_slabs: VecDeque<NonNull<Slab>>, // uk_part_slab
+}
+
+// SAFETY: Slab is Send.
+unsafe impl Send for KegState {}
