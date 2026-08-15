@@ -367,3 +367,6 @@ pub(super) struct KegState {
     pub(super) free: usize,                            // uk_free
     pub(super) partial_slabs: VecDeque<NonNull<Slab>>, // uk_part_slab
 }
+
+// SAFETY: Slab is Send.
+unsafe impl Send for KegState {}
