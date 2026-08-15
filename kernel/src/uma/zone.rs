@@ -22,12 +22,12 @@ pub struct UmaZone {
     bucket_keys: Arc<Vec<usize>>,
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
-    size: NonZero<usize>,                                             // uz_size
-    slab: unsafe fn(&mut UmaKeg, Alloc) -> Option<Pin<Strong<Slab>>>, // uz_slab
-    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,         // uz_init
-    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,         // uz_ctor
-    caches: CpuLocal<RefCell<UmaCache>>,                              // uz_cpu
-    flags: UmaFlags,                                                  // uz_flags
+    size: NonZero<usize>,                                              // uz_size
+    slab: unsafe fn(&Arc<UmaKeg>, Alloc) -> Option<Pin<Strong<Slab>>>, // uz_slab
+    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,          // uz_init
+    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,          // uz_ctor
+    caches: CpuLocal<RefCell<UmaCache>>,                               // uz_cpu
+    flags: UmaFlags,                                                   // uz_flags
     state: Mutex<ZoneState>,
 }
 
@@ -47,7 +47,7 @@ impl UmaZone {
         bucket_keys: Arc<Vec<usize>>,
         bucket_zones: Arc<Vec<UmaZone>>,
         name: impl Into<String>,
-        keg: Option<UmaKeg>,
+        keg: Option<Arc<UmaKeg>>,
         size: NonZero<usize>,
         align: Option<usize>,
         init: Option<fn()>,
@@ -304,7 +304,7 @@ impl UmaZone {
 
         if state.fills < config().cpu_count().get().into() {
             let n = min(b.items.len(), state.count);
-            let k = state.kegs.front_mut().unwrap();
+            let k = state.kegs.front().unwrap();
             let mut f = flags;
 
             state.fills += 1;
@@ -316,7 +316,7 @@ impl UmaZone {
                 };
 
                 while b.hdr.len < n {
-                    let i = unsafe { s.alloc_item(k) };
+                    let i = s.alloc_item();
 
                     if i.is_null() {
                         break;
@@ -357,11 +357,11 @@ impl UmaZone {
     /// |PS4 11.00|0x13DD50|
     fn alloc_item(&self, state: &mut ZoneState, flags: Alloc) -> *mut u8 {
         // Get a slab.
-        let keg = state.kegs.front_mut().unwrap();
+        let keg = state.kegs.front().unwrap();
         let slab = unsafe { (self.slab)(keg, flags) };
 
         if let Some(slab) = slab {
-            let item = unsafe { slab.as_ref().alloc_item(keg) };
+            let item = slab.alloc_item();
 
             state.alloc_count += 1;
 
@@ -389,7 +389,7 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    unsafe fn fetch_slab(keg: &mut UmaKeg, flags: Alloc) -> Option<Pin<Strong<Slab>>> {
+    unsafe fn fetch_slab(keg: &Arc<UmaKeg>, flags: Alloc) -> Option<Pin<Strong<Slab>>> {
         if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
                 if let Some(v) = unsafe { keg.fetch_slab(flags) } {
@@ -408,7 +408,7 @@ impl UmaZone {
 
 /// Contains mutable data for [UmaZone].
 struct ZoneState {
-    kegs: LinkedList<UmaKeg>,                   // uz_kegs + uz_klink
+    kegs: LinkedList<Arc<UmaKeg>>,              // uz_kegs + uz_klink
     full_buckets: VecDeque<NonNull<UmaBucket>>, // uz_full_bucket
     free_buckets: VecDeque<NonNull<UmaBucket>>, // uz_free_bucket
     alloc_count: u64,                           // uz_allocs
