@@ -831,6 +831,37 @@ impl<H: Hypervisor> Vmm<H> {
 
                     drop(resp.send(data));
                 }
+                VmmCommand::InsertBreakpoint { addr, size, resp } => 'b: {
+                    // Get physical address.
+                    let phys = match cpu.translate(addr) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            drop(resp.send(Err(CpuError::TranslateAddr(addr, Box::new(e)))));
+                            break 'b;
+                        }
+                    };
+
+                    // Get target memory.
+                    let (ptr, avai) = args.hv.ram().slice(phys, size);
+
+                    if ptr.is_null() || avai != size.get() {
+                        drop(resp.send(Err(CpuError::InvalidAddr(addr))));
+                        break 'b;
+                    }
+
+                    // Write breakpoint.
+                    let bp: &[u8] = cfg_select! {
+                        target_arch = "x86_64" => match size.get() {
+                            1 => &[0xCC], // INT3
+                            v => todo!("{v}")
+                        }
+                        _ => todo!(),
+                    };
+
+                    unsafe { ptr.copy_from_nonoverlapping(bp.as_ptr(), bp.len()) };
+
+                    drop(resp.send(Ok(())));
+                }
                 VmmCommand::Release(Some(addr)) => {
                     let mut st = cpu.states().map_err(|e| CpuError::GetStates(Box::new(e)))?;
 
@@ -915,6 +946,11 @@ pub enum VmmCommand {
         addr: usize,
         len: NonZero<usize>,
         resp: futures::channel::oneshot::Sender<Vec<u8>>,
+    },
+    InsertBreakpoint {
+        addr: usize,
+        size: NonZero<usize>,
+        resp: futures::channel::oneshot::Sender<Result<(), CpuError>>,
     },
     Release(Option<usize>),
 }
@@ -1067,6 +1103,9 @@ pub enum CpuError {
 
     #[error("couldn't translate address {0:#x}")]
     TranslateAddr(usize, #[source] Box<dyn Error + Send + Sync>),
+
+    #[error("address {0:#x} is not valid")]
+    InvalidAddr(usize),
 
     #[error("couldn't execute a post VM exit on a {0}")]
     DevicePostExitHandler(String, #[source] Box<dyn Error + Send + Sync>),

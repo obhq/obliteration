@@ -340,7 +340,8 @@ impl SessionState {
         let kind = iter.next().ok_or_else(|| "missing kind")?;
         let kind = Self::parse_hex(kind).ok_or_else(|| "invalid kind")?;
 
-        h.insert_software_breakpoint(addr, kind).await?;
+        h.insert_software_breakpoint(self.current_thread, addr, kind)
+            .await?;
 
         Ok(PacketResult::Reply("OK".into()))
     }
