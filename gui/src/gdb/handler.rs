@@ -23,6 +23,7 @@ pub trait GdbHandler {
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
     async fn insert_software_breakpoint(
         &mut self,
+        td: NonZero<usize>,
         addr: usize,
         kind: usize,
     ) -> Result<(), Box<dyn std::error::Error>>;

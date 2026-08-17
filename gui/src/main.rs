@@ -1025,10 +1025,24 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
 
     async fn insert_software_breakpoint(
         &mut self,
+        td: NonZero<usize>,
         addr: usize,
         kind: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        todo!()
+        let size = kind.try_into().unwrap();
+
+        if let Err(e) = self
+            .request(td, move |resp| VmmCommand::InsertBreakpoint {
+                addr,
+                size,
+                resp,
+            })
+            .await?
+        {
+            return Err(Box::new(e));
+        }
+
+        Ok(())
     }
 }
 
