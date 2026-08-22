@@ -102,6 +102,7 @@ impl Uma {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DC80|
+    #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub fn create_zone(
         &self,
         name: impl Into<String>,

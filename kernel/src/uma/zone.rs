@@ -251,7 +251,7 @@ impl UmaZone {
     pub unsafe fn free(&self, item: *mut u8) {
         if item.is_null() {
             return;
-        } else if let Some(_) = self.dtor {
+        } else if self.dtor.is_some() {
             todo!()
         }
 
@@ -469,9 +469,9 @@ unsafe impl Send for UmaCache {}
 
 /// Implementation of `uma_zctor_args` structure.
 pub struct ZoneArgs {
-    pub name: String,             // name
-    pub keg: Option<Arc<UmaKeg>>, // keg
-    pub size: NonZero<usize>,
+    pub name: String,                                             // name
+    pub keg: Option<Arc<UmaKeg>>,                                 // keg
+    pub size: NonZero<usize>,                                     // size
     pub align: Option<usize>,                                     // align
     pub init: Option<fn()>,                                       // uminit
     pub ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // ctor
