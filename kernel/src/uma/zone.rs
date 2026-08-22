@@ -26,6 +26,7 @@ pub struct UmaZone {
     slab: unsafe fn(&Arc<UmaKeg>, Alloc) -> Option<Pin<Strong<Slab>>>, // uz_slab
     init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,          // uz_init
     ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,          // uz_ctor
+    dtor: Option<fn()>,                                                // uz_dtor
     caches: CpuLocal<RefCell<UmaCache>>,                               // uz_cpu
     flags: UmaFlags,                                                   // uz_flags
     state: Mutex<ZoneState>,
@@ -40,30 +41,30 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
-    #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub(super) fn new(
         vm: &'static Vm,
         bucket_enable: Arc<AtomicBool>,
         bucket_keys: Arc<Vec<usize>>,
         bucket_zones: Arc<Vec<UmaZone>>,
-        name: impl Into<String>,
-        keg: Option<Arc<UmaKeg>>,
-        size: NonZero<usize>,
-        align: Option<usize>,
-        init: Option<fn()>,
-        flags: impl Into<UmaFlags>,
+        args: ZoneArgs,
     ) -> Self {
-        let name = name.into();
-        let flags = flags.into();
+        let name = args.name;
+        let flags = args.flags;
         let (keg, mut flags) = if flags.has_any(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will
             // construct a keg here if it is passed from the caller. If not it will allocate a new
             // keg from masterzone_k.
-            let keg = match keg {
+            let keg = match args.keg {
                 Some(v) => v,
-                None => UmaKeg::new(vm, size, align.unwrap_or(Self::ALIGN_CACHE), init, flags),
+                None => UmaKeg::new(
+                    vm,
+                    args.size,
+                    args.align.unwrap_or(Self::ALIGN_CACHE),
+                    args.init,
+                    flags,
+                ),
             };
 
             (keg, UmaFlags::zeroed())
@@ -124,7 +125,8 @@ impl UmaZone {
             size: keg.size(),
             slab: Self::fetch_slab,
             init: None,
-            ctor: None,
+            ctor: args.ctor,
+            dtor: args.dtor,
             caches: CpuLocal::new(|_| RefCell::default()),
             flags,
             state: Mutex::new(ZoneState {
@@ -235,6 +237,25 @@ impl UmaZone {
                 return self.alloc_item(&mut state, flags);
             }
         }
+    }
+
+    /// See `uma_zfree_arg` on the Orbis for a reference.
+    ///
+    /// # Safety
+    /// `item` either allocated from [Self::alloc()] or null.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x13EFC0|
+    pub unsafe fn free(&self, item: *mut u8) {
+        if item.is_null() {
+            return;
+        } else if let Some(_) = self.dtor {
+            todo!()
+        }
+
+        todo!()
     }
 
     fn alloc_from_cache(c: &mut UmaCache) -> *mut u8 {
@@ -445,3 +466,15 @@ struct UmaCache {
 }
 
 unsafe impl Send for UmaCache {}
+
+/// Implementation of `uma_zctor_args` structure.
+pub struct ZoneArgs {
+    pub name: String,             // name
+    pub keg: Option<Arc<UmaKeg>>, // keg
+    pub size: NonZero<usize>,
+    pub align: Option<usize>,                                     // align
+    pub init: Option<fn()>,                                       // uminit
+    pub ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // ctor
+    pub dtor: Option<fn()>,                                       // dtor
+    pub flags: UmaFlags,                                          // flags
+}
