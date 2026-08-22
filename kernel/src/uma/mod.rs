@@ -70,12 +70,16 @@ impl Uma {
                 bucket_enable.clone(),
                 Arc::default(),
                 Arc::default(),
-                format!("{size} Bucket"),
-                None,
-                layout.size().try_into().unwrap(),
-                Some(layout.align() - 1),
-                None,
-                UmaFlags::Bucket | UmaFlags::Internal,
+                ZoneArgs {
+                    name: format!("{size} Bucket"),
+                    keg: None,
+                    size: layout.size().try_into().unwrap(),
+                    align: Some(layout.align() - 1),
+                    init: None,
+                    ctor: None,
+                    dtor: None,
+                    flags: UmaFlags::Bucket | UmaFlags::Internal,
+                },
             ));
 
             while ki <= size {
@@ -98,12 +102,15 @@ impl Uma {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DC80|
+    #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub fn create_zone(
         &self,
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,
         init: Option<fn()>,
+        ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,
+        dtor: Option<fn()>,
         flags: impl Into<UmaFlags>,
     ) -> UmaZone {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
@@ -113,12 +120,16 @@ impl Uma {
             self.bucket_enable.clone(),
             self.bucket_keys.clone(),
             self.bucket_zones.clone(),
-            name,
-            None,
-            size,
-            align,
-            init,
-            flags,
+            ZoneArgs {
+                name: name.into(),
+                keg: None,
+                size,
+                align,
+                init,
+                ctor,
+                dtor,
+                flags: flags.into(),
+            },
         )
     }
 }

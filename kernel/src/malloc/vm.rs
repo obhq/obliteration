@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::cell::RefCell;
 use core::num::NonZero;
+use core::ptr::null_mut;
 
 /// Kernel heap that allocate a memory from a virtual memory management system. This struct is a
 /// merge of `malloc_type` and `malloc_type_internal` structure.
@@ -30,9 +31,6 @@ impl VmHeap {
     /// |---------|--------|
     /// |PS4 11.00|0x1A4B80|
     pub fn new(vm: &'static Vm) -> Self {
-        // The possible of maximum alignment that Layout allowed is a bit before the most
-        // significant bit of isize (e.g. 0x4000000000000000 on 64 bit system). So we can use
-        // "size_of::<usize>() * 8 - 1" to get the size of array for all possible alignment.
         let uma = uma().unwrap();
         let zones = core::array::from_fn(|align| {
             let mut zones = Vec::with_capacity(Self::KMEM_ZSIZE + 1);
@@ -56,6 +54,8 @@ impl VmHeap {
                     size.to_string(),
                     size,
                     Some(align - 1),
+                    None,
+                    None,
                     None,
                     UmaFlags::Malloc,
                 ));
@@ -100,19 +100,13 @@ impl VmHeap {
         let size = layout.size();
         let mem = if size <= PAGE_SIZE.get() {
             // Get zone to allocate from.
-            let align = layout.align().trailing_zeros() as usize;
-            let size = if (size & Self::KMEM_ZMASK) != 0 {
-                // TODO: Refactor this for readability.
-                (size + Self::KMEM_ZBASE) & !Self::KMEM_ZMASK
-            } else {
-                size
+            let zone = match self.zone_for_layout(layout) {
+                Some(v) => v,
+                None => return null_mut(),
             };
 
             // Allocate a memory from UMA zone.
-            let zone = &self.zones[align][size >> Self::KMEM_ZSHIFT];
             let mem = zone.alloc(Alloc::Wait | Alloc::Zero);
-
-            // Update stats.
             let stats = self.stats.lock();
             let mut stats = stats.borrow_mut();
             let size = if mem.is_null() { 0 } else { zone.size().get() };
@@ -146,7 +140,7 @@ impl VmHeap {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1A43E0|
-    pub unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
+    pub unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let page = (ptr as usize) & !PAGE_MASK.get();
         let page = unsafe { kaddr_to_phys(page) };
         let page = self.vm.phys_to_page(page).unwrap(); // Orbis assume the pointer is not null.
@@ -157,8 +151,33 @@ impl VmHeap {
         if slab.flags().has_any(SlabFlags::Malloc) {
             todo!()
         } else {
-            todo!()
+            let zone = self.zone_for_layout(layout).unwrap(); // Layout is the same as allocation.
+
+            unsafe { zone.free(ptr) };
         }
+
+        todo!()
+    }
+
+    /// Returns [None] if align is not supported.
+    ///
+    /// # Panics
+    /// If size greater than [PAGE_SIZE].
+    fn zone_for_layout(&self, layout: Layout) -> Option<&UmaZone> {
+        // Check if align supported.
+        let align = layout.align().trailing_zeros() as usize;
+        let zones = self.zones.get(align)?;
+
+        // Round size.
+        let size = layout.size();
+        let size = if (size & Self::KMEM_ZMASK) != 0 {
+            // TODO: Refactor this for readability.
+            (size + Self::KMEM_ZBASE) & !Self::KMEM_ZMASK
+        } else {
+            size
+        };
+
+        Some(&zones[size >> Self::KMEM_ZSHIFT])
     }
 }
 
