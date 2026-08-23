@@ -152,6 +152,8 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             "_M" | _ => Ok(PacketResult::Reply(Vec::new())), // Empty response for unimplemented.
             "c" | data => state.parse_continue(data, self.handler),
             "jThreadsInfo" => Ok(PacketResult::Reply(Vec::new())),
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#jthreadextendedinfo
+            "jThreadExtendedInfo" | _ => Ok(PacketResult::Reply(Vec::new())),
             "k" => Ok(PacketResult::Exit),
             "m" | data => state.parse_read_memory(data, self.handler, false).await,
             // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
