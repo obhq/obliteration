@@ -273,21 +273,18 @@ impl UmaZone {
             let caches = self.caches.lock();
             let mut cache = caches.borrow_mut();
 
-            loop {
-                match cache.free {
-                    Some(_) => todo!(),
-                    None => break,
-                }
+            while let Some(_) = cache.free {
+                todo!()
             }
 
             state.alloc_count += core::mem::take(&mut cache.allocs);
             state.free_count += core::mem::take(&mut cache.frees);
 
-            if let Some(_) = cache.free.take() {
+            if cache.free.take().is_some() {
                 todo!()
             }
 
-            if let Some(_) = state.free_buckets.front() {
+            if state.free_buckets.front().is_some() {
                 todo!()
             }
 
@@ -382,12 +379,11 @@ impl UmaZone {
                     // Initialize bucket.
                     let h = BucketHdr { len: 0 };
                     let s = Uma::BUCKET_SIZES[k];
-                    let b = unsafe {
+
+                    unsafe {
                         core::ptr::write(b.cast(), h);
                         core::ptr::slice_from_raw_parts_mut(b, s) as *mut UmaBucket
-                    };
-
-                    b
+                    }
                 } else {
                     todo!()
                 }
