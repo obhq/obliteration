@@ -161,6 +161,8 @@ pub enum UmaFlags {
     Bucket = 0x2000000,
     /// `UMA_ZFLAG_INTERNAL`.
     Internal = 0x20000000,
+    /// `UMA_ZFLAG_FULL`.
+    Full = 0x40000000,
     /// `UMA_ZFLAG_CACHEONLY`.
     CacheOnly = 0x80000000,
 }
