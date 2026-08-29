@@ -273,7 +273,7 @@ impl UmaZone {
             let caches = self.caches.lock();
             let mut cache = caches.borrow_mut();
 
-            while let Some(_) = cache.free {
+            while cache.free.is_some() {
                 todo!()
             }
 
