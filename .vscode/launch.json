@@ -2,9 +2,12 @@
   "configurations": [
     {
       "name": "GUI",
-      "type": "lldb",
+      "type": "lldb-dap",
       "request": "launch",
       "preLaunchTask": "Build",
+      "initCommands": [
+        "settings set symbols.enable-external-lookup false"
+      ],
       "linux": {
         "program": "${workspaceFolder}/dist/bin/obliteration"
       },
@@ -17,27 +20,27 @@
     },
     {
       "name": "Kernel",
-      "type": "lldb",
-      "request": "launch",
-      "processCreateCommands": [
-        "gdb-remote 1234"
-      ],
+      "type": "lldb-dap",
+      "request": "attach",
       "linux": {
-        "targetCreateCommands": [
+        "attachCommands": [
           "target create ${workspaceFolder}/dist/share/obkrnl",
-          "target modules load --file ${workspaceFolder}/dist/share/obkrnl -s 0xffffffff82200000"
+          "target modules load --file ${workspaceFolder}/dist/share/obkrnl -s 0xffffffff82200000",
+          "gdb-remote 1234"
         ]
       },
       "osx": {
-        "targetCreateCommands": [
+        "attachCommands": [
           "target create ${workspaceFolder}/dist/Obliteration.app/Contents/Resources/obkrnl",
-          "target modules load --file ${workspaceFolder}/dist/Obliteration.app/Contents/Resources/obkrnl -s 0xffffffff82200000"
+          "target modules load --file ${workspaceFolder}/dist/Obliteration.app/Contents/Resources/obkrnl -s 0xffffffff82200000",
+          "gdb-remote 1234"
         ]
       },
       "windows": {
-        "targetCreateCommands": [
+        "attachCommands": [
           "target create ${workspaceFolder}/dist/share/obkrnl",
-          "target modules load --file ${workspaceFolder}/dist/share/obkrnl -s 0xffffffff82200000"
+          "target modules load --file ${workspaceFolder}/dist/share/obkrnl -s 0xffffffff82200000",
+          "gdb-remote 1234"
         ]
       }
     }
