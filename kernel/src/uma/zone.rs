@@ -160,13 +160,13 @@ impl UmaZone {
             }
         }
 
-        loop {
+        let m = loop {
             // Try allocate from per-CPU cache first so we don't need to acquire a mutex lock.
             let caches = self.caches.lock();
             let mem = Self::alloc_from_cache(caches.borrow_mut().deref_mut());
 
             if !mem.is_null() {
-                return mem;
+                break mem;
             }
 
             drop(caches); // Exit from non-sleeping context before acquire the mutex.
@@ -179,7 +179,7 @@ impl UmaZone {
             let mem = Self::alloc_from_cache(&mut cache);
 
             if !mem.is_null() {
-                return mem;
+                break mem;
             }
 
             // TODO: What actually we are doing here?
@@ -196,9 +196,9 @@ impl UmaZone {
                 // Seems like this should never fail.
                 let m = Self::alloc_from_cache(&mut cache);
 
-                assert!(!m.is_null());
+                debug_assert!(!m.is_null());
 
-                return m;
+                break m;
             }
 
             drop(cache);
@@ -235,6 +235,17 @@ impl UmaZone {
             if self.alloc_bucket(&mut state, flags) {
                 return self.alloc_item(&mut state, flags);
             }
+        };
+
+        // The Orbis apply M_ZERO after calling uz_ctor, which seems like a bug.
+        if flags.has_any(Alloc::Zero) {
+            unsafe { m.write_bytes(0, self.size.get()) };
+        }
+
+        if self.ctor.is_none_or(move |f| f(m, self.size, flags)) {
+            m
+        } else {
+            todo!()
         }
     }
 
@@ -328,8 +339,12 @@ impl UmaZone {
 
     fn alloc_from_cache(c: &mut UmaCache) -> *mut u8 {
         while let Some(b) = c.alloc.map(|v| v.as_ptr()) {
-            if unsafe { (*b).hdr.len != 0 } {
-                todo!()
+            if let Some(v) = unsafe { (*b).hdr.len.checked_sub(1) } {
+                unsafe { (*b).hdr.len = v };
+
+                c.allocs += 1;
+
+                return unsafe { (*b).items[v] };
             }
 
             if c.free
