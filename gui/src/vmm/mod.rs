@@ -471,7 +471,7 @@ impl Vmm<()> {
         let hv = Arc::new(hv);
         let (cpu_sender, receiver) = crate::util::channel::new(NonZero::new(100).unwrap());
         let (sender, cpu_receiver) = std::sync::mpsc::channel();
-        let suspend = Arc::new(AtomicBool::new(debug));
+        let suspend = Arc::new(AtomicBool::new(false));
         let args = CpuArgs {
             hv: hv.clone(),
             vm_page_size,
@@ -485,7 +485,7 @@ impl Vmm<()> {
         // Spawn thread to drive main CPU.
         let start = map.kern_vaddr + img.entry();
         let thread = std::thread::Builder::new()
-            .spawn(move || Vmm::main_cpu(args, start, map))
+            .spawn(move || Vmm::main_cpu(args, start, map, debug))
             .map_err(VmmError::SpawnMainCpu)?;
 
         Ok(Vmm {
@@ -648,7 +648,12 @@ impl<H> Vmm<H> {
 }
 
 impl<H: Hypervisor> Vmm<H> {
-    fn main_cpu(args: CpuArgs<H>, entry: usize, map: RamMap) -> Result<bool, CpuError> {
+    fn main_cpu(
+        args: CpuArgs<H>,
+        entry: usize,
+        map: RamMap,
+        debug: bool,
+    ) -> Result<bool, CpuError> {
         // Create CPU.
         let hv = args.hv.as_ref();
         let mut cpu = match hv.create_cpu(0) {
@@ -658,6 +663,13 @@ impl<H: Hypervisor> Vmm<H> {
 
         if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map, args.vm_page_size) {
             return Err(CpuError::Setup(Box::new(e)));
+        }
+
+        // Wait for debugger.
+        if debug {
+            if let Some(v) = Self::dispatch_command(&args, &mut cpu, None)? {
+                return Ok(v);
+            }
         }
 
         // Run.
