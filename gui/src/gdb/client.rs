@@ -147,7 +147,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // Queries the reason the target halted. Defined on the Packets page (search for "'?'"
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
-            "?" => state.parse_stop_reason(self.handler).await,
+            "?" => state.parse_stop_reason(),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#m-size-permissions.
             "_M" | _ => Ok(PacketResult::Reply(Vec::new())), // Empty response for unimplemented.
             "c" | data => state.parse_continue(data, self.handler),

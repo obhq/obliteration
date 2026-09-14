@@ -129,12 +129,7 @@ impl SessionState {
         ))
     }
 
-    pub async fn parse_stop_reason<H: GdbHandler>(
-        &mut self,
-        h: &mut H,
-    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
-        h.suspend_threads().await?;
-
+    pub fn parse_stop_reason(&mut self) -> Result<PacketResult, Box<dyn std::error::Error>> {
         // We need to use SIGTRAP here otherwise the GDB will resume the kernel without apply the
         // breakpoints.
         //
