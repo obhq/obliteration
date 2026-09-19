@@ -27,6 +27,10 @@ pub struct Slab {
 }
 
 impl Slab {
+    pub fn keg(&self) -> &UmaKeg {
+        &self.hdr.keg
+    }
+
     pub fn flags(&self) -> SlabFlags {
         self.hdr.flags
     }

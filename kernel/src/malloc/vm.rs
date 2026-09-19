@@ -112,10 +112,7 @@ impl VmHeap {
             let size = if mem.is_null() { 0 } else { zone.size().get() };
 
             if size != 0 {
-                stats.alloc_bytes = stats
-                    .alloc_bytes
-                    .checked_add(size.try_into().unwrap())
-                    .unwrap();
+                stats.alloc_bytes = stats.alloc_bytes.strict_add(size.try_into().unwrap());
                 stats.alloc_count += 1;
             }
 
@@ -147,16 +144,25 @@ impl VmHeap {
         let ps = page.state.lock();
         let obj = ps.object.as_ref().unwrap(); // Orbis panic when this is null.
         let PageObj::Slab(slab) = obj;
-
-        if slab.flags().has_any(SlabFlags::Malloc) {
+        let size = if slab.flags().has_any(SlabFlags::Malloc) {
             todo!()
         } else {
+            // TODO: Should we drop the lock on page state before doing this?
             let zone = self.zone_for_layout(layout).unwrap(); // Layout is the same as allocation.
 
             unsafe { zone.free(ptr) };
-        }
 
-        todo!()
+            slab.keg().size()
+        };
+
+        drop(ps);
+
+        // Update stats.
+        let stats = self.stats.lock();
+        let mut stats = stats.borrow_mut();
+
+        stats.freed_bytes = stats.freed_bytes.strict_add(size.get().try_into().unwrap());
+        stats.freed_count += 1;
     }
 
     /// Returns [None] if align is not supported.
@@ -186,4 +192,6 @@ impl VmHeap {
 struct Stats {
     alloc_bytes: u64, // mts_memalloced
     alloc_count: u64, // mts_numallocs
+    freed_bytes: u64, // mts_memfreed
+    freed_count: u64, // mts_numfrees
 }
