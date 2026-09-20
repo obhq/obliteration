@@ -280,12 +280,47 @@ impl UmaZone {
 
         // TODO: The uz_flags check on above defeat below optimization. On Orbis they did not put
         // uz_flags behind a uz_lock.
-        loop {
-            let caches = self.caches.lock();
-            let mut cache = caches.borrow_mut();
+        let mut caches = self.caches.lock();
+        let mut cache = caches.borrow_mut();
 
-            while cache.free.is_some() {
-                todo!()
+        loop {
+            while let Some(b) = cache.free.map(|mut v| unsafe { v.as_mut() }) {
+                loop {
+                    // Check if bucket has available space.
+                    let n = if matches!(
+                        self.ty,
+                        ZoneType::MbufCluster
+                            | ZoneType::Mbuf
+                            | ZoneType::MbufJumboPage
+                            | ZoneType::MbufClusterPack
+                            | ZoneType::MbufPacket
+                    ) {
+                        todo!()
+                    } else {
+                        b.items.len()
+                    };
+
+                    if let i = b.hdr.len
+                        && i < n
+                    {
+                        b.items[i] = item;
+                        b.hdr.len = i + 1;
+
+                        cache.frees += 1;
+
+                        if self.ty != ZoneType::MbufPacket
+                            && self.ty != ZoneType::MbufJumboPage
+                            && self.ty != ZoneType::Mbuf
+                            && self.ty != ZoneType::MbufCluster
+                        {
+                            return;
+                        }
+
+                        todo!()
+                    }
+
+                    todo!()
+                }
             }
 
             state.alloc_count += core::mem::take(&mut cache.allocs);
@@ -295,8 +330,9 @@ impl UmaZone {
                 todo!()
             }
 
-            if state.free_buckets.front().is_some() {
-                todo!()
+            if let Some(b) = state.free_buckets.pop_front() {
+                cache.free = Some(b);
+                continue;
             }
 
             drop(cache);
@@ -334,6 +370,9 @@ impl UmaZone {
             state
                 .free_buckets
                 .push_front(unsafe { NonNull::new_unchecked(b) });
+
+            caches = self.caches.lock();
+            cache = caches.borrow_mut();
         }
     }
 
@@ -546,7 +585,8 @@ enum ZoneType {
 #[derive(Default)]
 struct UmaCache {
     alloc: Option<NonNull<UmaBucket>>, // uc_allocbucket
-    free: Option<NonNull<UmaBucket>>,  // uc_freebucket
+    /// The pointer must be unique.
+    free: Option<NonNull<UmaBucket>>, // uc_freebucket
     allocs: u64,                       // uc_allocs
     frees: u64,                        // uc_frees
 }
