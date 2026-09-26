@@ -8,7 +8,6 @@ pub struct SessionState {
     current_thread: NonZero<usize>,
     no_ack: Option<bool>,
     thread_suffix_supported: bool,
-    threads_in_stop_reply: bool,
 }
 
 impl SessionState {
@@ -75,14 +74,6 @@ impl SessionState {
         &mut self,
     ) -> Result<PacketResult, Box<dyn std::error::Error>> {
         self.thread_suffix_supported = true;
-
-        Ok(PacketResult::Reply(b"OK".into()))
-    }
-
-    pub fn parse_enable_threads_in_stop_reply(
-        &mut self,
-    ) -> Result<PacketResult, Box<dyn std::error::Error>> {
-        self.threads_in_stop_reply = true;
 
         Ok(PacketResult::Reply(b"OK".into()))
     }
@@ -354,7 +345,6 @@ impl Default for SessionState {
             current_thread: NonZero::<usize>::MIN,
             no_ack: None,
             thread_suffix_supported: false,
-            threads_in_stop_reply: false,
         }
     }
 }
