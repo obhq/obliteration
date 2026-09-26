@@ -148,8 +148,6 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "?" => state.parse_stop_reason(),
-            // https://lldb.llvm.org/resources/lldbgdbremote.html#m-size-permissions.
-            "_M" | _ => Ok(PacketResult::Reply(Vec::new())), // Empty response for unimplemented.
             "c" | data => state.parse_continue(data, self.handler),
             "jThreadsInfo" => Ok(PacketResult::Reply(Vec::new())),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#jthreadextendedinfo
@@ -169,7 +167,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
             "qHostInfo" => state.parse_host_info(),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
-            "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(),
+            "QListThreadsInStopReply" => Ok(PacketResult::Reply(Vec::new())),
             // The VMM already relocated the kernel.
             "qOffsets" => Ok(PacketResult::Reply(Vec::new())),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qregisterinfo-hex-reg-id
