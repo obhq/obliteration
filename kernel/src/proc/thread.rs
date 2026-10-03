@@ -1,7 +1,6 @@
 use super::{LocalCell, Proc};
 use alloc::sync::Arc;
 use core::cell::Cell;
-use core::mem::transmute;
 use core::sync::atomic::{AtomicU8, Ordering};
 use crossbeam_utils::CachePadded;
 use sync_unsafe_cell::SyncUnsafeCell;
@@ -86,8 +85,9 @@ impl Thread {
     /// It is **very very very** easy to cause UB with this method. This method is ultra dangerous
     /// and can be safely called in a very limited location so if you think you are going to use
     /// this method in some random places, 99.99% it is wrong.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn local_state_unchecked(&self) -> &mut LocalState {
-        unsafe { transmute(self.local_state.get()) }
+        unsafe { &mut *self.local_state.get() }
     }
 
     pub fn active_mutexes(&self) -> &LocalCell<Cell<u16>> {
