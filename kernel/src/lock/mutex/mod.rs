@@ -56,7 +56,9 @@ impl<T> Mutex<T> {
             todo!()
         }
 
-        td.set_active_mutexes(td.active_mutexes() + 1);
+        // SAFETY: td is the execution thread and td.can_sleep() on the above already reject a call
+        // from interrupt handler.
+        unsafe { td.active_mutexes().as_ref().update(|v| v.strict_add(1)) };
 
         MutexGuard {
             data: self.data.get(),
@@ -72,7 +74,9 @@ impl<T> Mutex<T> {
     unsafe fn unlock(lock: &AtomicUsize) {
         let td = current_thread();
 
-        td.set_active_mutexes(td.active_mutexes() - 1);
+        // SAFETY: td is the execution thread and safety requirement of this function guarantee we
+        // are not called from interrupt handler.
+        unsafe { td.active_mutexes().as_ref().update(|v| v - 1) };
 
         // TODO: There is a check for (m->lock_object).lo_data == 0 on the PS4.
         if lock

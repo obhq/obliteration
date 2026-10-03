@@ -27,12 +27,16 @@ pub extern "C" fn interrupt_handler(frame: &mut TrapFrame) {
 /// This will be called by an inline assembly.
 ///
 /// See `amd64_syscall` function on the PS4 for a reference.
-pub extern "C" fn syscall_handler() {
+///
+/// # Safety
+/// This function can only be called by syscall's entry point.
+pub unsafe extern "C" fn syscall_handler() {
     // TODO: Implement pc_cnt.v_syscall increment.
     let td = current_thread();
+    let cx = unsafe { td.local_state_unchecked() };
     let p = td.proc();
 
-    td.set_profiling_ticks(0);
+    cx.profiling_ticks = 0;
 
     // We merge sv_fetch_syscall_args and the code to invoke each syscall handler together.
     p.abi().syscall_handler();

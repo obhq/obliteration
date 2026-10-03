@@ -1,4 +1,5 @@
 pub use self::abi::*;
+pub use self::cell::*;
 pub use self::pid::*;
 pub use self::process::*;
 pub use self::thread::*;
