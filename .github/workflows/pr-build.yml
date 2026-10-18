@@ -23,6 +23,10 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-linux.yml
     needs: prebuild
+  build-linux-aarch64:
+    name: Build
+    uses: ./.github/workflows/ci-linux-aarch64.yml
+    needs: prebuild
   build-mac:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
@@ -34,7 +38,7 @@ jobs:
   postbuild:
     name: Post build
     runs-on: ubuntu-24.04
-    needs: [build-windows, build-linux, build-mac, build-docs]
+    needs: [build-windows, build-linux, build-linux-aarch64, build-mac, build-docs]
     steps:
     - name: Generate build information
       run: |
