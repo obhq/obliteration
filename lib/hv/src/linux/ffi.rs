@@ -260,6 +260,15 @@ pub struct KvmGuestDebugArch {
 
 #[cfg(target_arch = "aarch64")]
 #[repr(C)]
+pub struct KvmGuestDebugArch {
+    pub dbg_bcr: [u64; 16],
+    pub dbg_bvr: [u64; 16],
+    pub dbg_wcr: [u64; 16],
+    pub dbg_wvr: [u64; 16],
+}
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
 pub struct KvmOneReg<'a, T> {
     pub id: u64,
     pub addr: &'a mut T,
