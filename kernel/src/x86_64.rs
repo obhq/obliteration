@@ -57,6 +57,20 @@ pub fn identify_cpu() -> CpuInfo {
     let r = core::arch::x86_64::__cpuid(1);
     let cpu_id = r.eax;
 
+    // SYSCALL and SYSRET are essential so just panic. The check is CPUID leaf 0x80000001 so make
+    // sure the leaf is available first.
+    let r = core::arch::x86_64::__cpuid(0x80000000);
+
+    if r.eax < 0x80000001 {
+        panic!("CPUID leaf 0x80000001 is not available");
+    }
+
+    let r = core::arch::x86_64::__cpuid(0x80000001);
+
+    if r.edx & (1 << 11) == 0 {
+        panic!("SYSCALL and SYSRET instruction is not available");
+    }
+
     // TODO: Get cpu_feature.
     CpuInfo { cpu_vendor, cpu_id }
 }
