@@ -4,7 +4,7 @@ on:
 jobs:
   build:
     name: Mac M1
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
     - name: Check out repository
       uses: actions/checkout@v6
