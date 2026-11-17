@@ -1,0 +1,30 @@
+name: CI (Linux AArch64)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: Linux AArch64
+    runs-on: ubuntu-22.04-arm # Lowest version that support Vulkan 1.3.
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v6
+    - name: Install System Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libvulkan-dev
+    - name: Update Rust
+      run: rustup update stable
+    - name: Install Rust nightly
+      run: rustup toolchain install nightly
+    - name: Install additional Rust components
+      run: rustup component add rust-src --toolchain nightly
+    - name: Install additional Rust targets
+      run: rustup target add aarch64-unknown-none-softfloat
+    - name: Install additional tools
+      run: cargo install project
+    - name: Lint Rust sources
+      run: project lint
+    - name: Build
+      run: project build -r
+    - name: Run tests
+      run: cargo test
