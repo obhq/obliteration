@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::Kvm;
 use super::ffi::{ARM64_SYS_REG, KVM_SET_ONE_REG, KvmOneReg};
-use crate::{CpuStates, HypervisorExt, Pstate, Sctlr, Tcr};
+use crate::{CpuCommit, CpuStates, HypervisorExt, Pstate, Sctlr, Tcr};
 use libc::ioctl;
 use std::io::Error;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -21,6 +22,7 @@ pub struct KvmStates<'a> {
     pc: State<u64>,
     x0: State<u64>,
     x1: State<u64>,
+    x2: State<u64>,
 }
 
 impl<'a> KvmStates<'a> {
@@ -37,6 +39,7 @@ impl<'a> KvmStates<'a> {
             pc: State::None,
             x0: State::None,
             x1: State::None,
+            x2: State::None,
         })
     }
 
@@ -96,6 +99,12 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.x1 = State::Dirty(v.try_into().unwrap());
     }
 
+    fn set_x2(&mut self, v: usize) {
+        self.x2 = State::Dirty(v.try_into().unwrap());
+    }
+}
+
+impl<'a> CpuCommit for KvmStates<'a> {
     fn commit(mut self) -> Result<(), Self::Err> {
         // PSTATE.
         if let State::Dirty(v) = self.pstate {
@@ -157,6 +166,11 @@ impl<'a> CpuStates for KvmStates<'a> {
                 .map_err(StatesError::SetX1Failed)?;
         }
 
+        if let State::Dirty(v) = self.x2 {
+            self.set_reg(0x6030000000100004, v)
+                .map_err(StatesError::SetX2Failed)?;
+        }
+
         Ok(())
     }
 }
@@ -198,4 +212,7 @@ pub enum StatesError {
 
     #[error("couldn't set X1")]
     SetX1Failed(#[source] Error),
+
+    #[error("couldn't set X2")]
+    SetX2Failed(#[source] Error),
 }

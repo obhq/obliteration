@@ -213,10 +213,10 @@ pub fn new(
     #[cfg(target_arch = "aarch64")]
     let feats = {
         use self::ffi::{ARM64_SYS_REG, KVM_GET_ONE_REG, KvmOneReg};
-        use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
+        use crate::{Mmfr0, Mmfr1, Mmfr2};
 
         // ID_AA64MMFR0_EL1.
-        let cpu = cpus[0].get_mut().unwrap().as_fd();
+        let cpu = cpus[0].get_mut().unwrap();
         let mut mmfr0 = Mmfr0::default();
         let mut req = KvmOneReg {
             id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b000),

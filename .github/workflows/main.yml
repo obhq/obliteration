@@ -11,6 +11,9 @@ jobs:
   build-linux:
     name: Build
     uses: ./.github/workflows/ci-linux.yml
+  build-linux-aarch64:
+    name: Build
+    uses: ./.github/workflows/ci-linux-aarch64.yml
   build-mac:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
