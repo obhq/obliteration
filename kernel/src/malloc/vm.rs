@@ -96,7 +96,7 @@ impl VmHeap {
         }
 
         // Determine how to allocate.
-        let lock = td.disable_vm_heap();
+        let lock = unsafe { td.disable_vm_heap() };
         let size = layout.size();
         let mem = if size <= PAGE_SIZE.get() {
             // Get zone to allocate from.

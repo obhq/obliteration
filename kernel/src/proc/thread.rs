@@ -1,29 +1,34 @@
-use super::Proc;
-use super::cell::{PrivateCell, get, set};
-use crate::lock::{Gutex, GutexGroup, GutexWrite};
+use super::{LocalCell, Proc};
 use alloc::sync::Arc;
 use core::cell::Cell;
-use core::marker::PhantomData;
 use core::sync::atomic::{AtomicU8, Ordering};
+use crossbeam_utils::CachePadded;
+use sync_unsafe_cell::SyncUnsafeCell;
 
 /// Implementation of `thread` structure.
 ///
 /// All thread **must** run to completion once execution has been started otherwise resource will be
-/// leak if the thread is dropped while its execution currently in the kernel space.
+/// leak if the thread is dropped without finished execution.
 ///
 /// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` and `td_critnest` since it is the
 /// only cases the thread should not allow to sleep.
 ///
-/// Do not try to access any [RefCell](core::cell::RefCell) fields from interrupt handler because it
-/// might currently locked.
+/// A field in the struct belong to one of the following group:
+///
+/// 1. Shared.
+/// 2. Local accessible through [LocalState].
+/// 3. Local accessible through this struct.
+///
+/// An interrupt handler can access only fields in group 1.
+#[repr(C)] // Force all fields in group 3 to be on a different cache line from group 1.
 pub struct Thread {
-    proc: Arc<Proc>,                         // td_proc
-    active_pins: AtomicU8,                   // td_critnest
-    active_interrupts: AtomicU8,             // td_intr_nesting_level
-    active_mutexes: PrivateCell<Cell<u16>>,  // td_locks
-    sleeping: Gutex<usize>,                  // td_wchan
-    profiling_ticks: PrivateCell<Cell<u32>>, // td_pticks
-    active_heap_guard: PrivateCell<Cell<usize>>,
+    proc: Arc<Proc>,             // td_proc
+    active_pins: AtomicU8,       // td_critnest
+    active_interrupts: AtomicU8, // td_intr_nesting_level
+    local_state: CachePadded<SyncUnsafeCell<LocalState>>,
+    active_mutexes: LocalCell<Cell<u16>>, // td_locks
+    sleeping: LocalCell<Cell<usize>>,     // td_wchan
+    active_heap_guard: LocalCell<Cell<usize>>,
 }
 
 impl Thread {
@@ -36,16 +41,14 @@ impl Thread {
     pub fn new_bare(proc: Arc<Proc>) -> Self {
         // td_critnest on the PS4 started with 1 but this does not work in our case because we use
         // RAII to increase and decrease it.
-        let gg = GutexGroup::new();
-
         Self {
             proc,
             active_pins: AtomicU8::new(0),
             active_interrupts: AtomicU8::new(0),
-            active_mutexes: PrivateCell::default(),
-            sleeping: gg.spawn(0),
-            profiling_ticks: PrivateCell::default(),
-            active_heap_guard: PrivateCell::default(),
+            local_state: CachePadded::new(SyncUnsafeCell::new(LocalState { profiling_ticks: 0 })),
+            active_mutexes: LocalCell::new(Cell::new(0)),
+            sleeping: LocalCell::new(Cell::new(0)),
+            active_heap_guard: LocalCell::new(Cell::new(0)),
         }
     }
 
@@ -78,58 +81,51 @@ impl Thread {
         &self.active_interrupts
     }
 
-    /// # Panics
-    /// If called from the other thread.
-    pub fn active_mutexes(&self) -> u16 {
-        get!(self, active_mutexes)
+    /// # Safety
+    /// It is **very very very** easy to cause UB with this method. This method is ultra dangerous
+    /// and can be safely called in a very limited location so if you think you are going to use
+    /// this method in some random places, 99.99% it is wrong.
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn local_state_unchecked(&self) -> &mut LocalState {
+        unsafe { &mut *self.local_state.get() }
     }
 
-    /// # Panics
-    /// If called from the other thread.
-    pub fn set_active_mutexes(&self, v: u16) {
-        set!(self, active_mutexes, v)
+    pub fn active_mutexes(&self) -> &LocalCell<Cell<u16>> {
+        &self.active_mutexes
     }
 
     /// Sleeping address. Zero if this thread is not in a sleep queue.
-    pub fn sleeping_mut(&self) -> GutexWrite<'_, usize> {
-        self.sleeping.write()
+    pub fn sleeping(&self) -> &LocalCell<Cell<usize>> {
+        &self.sleeping
     }
 
-    /// # Panics
-    /// If called from the other thread.
-    pub fn set_profiling_ticks(&self, v: u32) {
-        set!(self, profiling_ticks, v)
+    /// # Safety
+    /// This method cannot be called by the other thread or interrupt handler.
+    pub unsafe fn active_heap_guard(&self) -> usize {
+        unsafe { self.active_heap_guard.get() }
     }
 
-    /// # Panics
-    /// If called from the other thread.
-    pub fn active_heap_guard(&self) -> usize {
-        get!(self, active_heap_guard)
+    /// # Safety
+    /// This method cannot be called by the other thread or interrupt handler.
+    pub unsafe fn disable_vm_heap(&self) -> HeapGuard<'_> {
+        let active = unsafe { self.active_heap_guard.as_ref() };
+
+        active.update(|v| v.strict_add(1));
+
+        HeapGuard(active)
     }
+}
 
-    pub fn disable_vm_heap(&self) -> HeapGuard<'_> {
-        let v = get!(self, active_heap_guard).checked_add(1).unwrap();
-
-        set!(self, active_heap_guard, v);
-
-        HeapGuard {
-            td: self,
-            phantom: PhantomData,
-        }
-    }
+/// Contains data to be used exclusively by the execution thread.
+pub struct LocalState {
+    pub profiling_ticks: u32, // td_pticks
 }
 
 /// RAII struct to disable VM heap for the thread.
-pub struct HeapGuard<'a> {
-    td: &'a Thread,
-    phantom: PhantomData<*const ()>, // For !Send and !Sync.
-}
+pub struct HeapGuard<'a>(&'a Cell<usize>);
 
 impl Drop for HeapGuard<'_> {
     fn drop(&mut self) {
-        let td = self.td;
-        let v = get!(td, active_heap_guard) - 1;
-
-        set!(td, active_heap_guard, v);
+        self.0.update(|v| v - 1);
     }
 }

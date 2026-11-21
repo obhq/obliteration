@@ -1028,9 +1028,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.20"
+version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22ec99545bb0ed0ea7bb9b8e1e9122ea386ff8a48c0922e43f36d45ab09e0e80"
+checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
 name = "crunchy"
@@ -3131,12 +3131,14 @@ dependencies = [
  "bitfield-struct",
  "bitflag",
  "config",
+ "crossbeam-utils",
  "hashbrown 0.16.0",
  "humansize",
  "indexmap",
  "krt",
  "macros",
  "rustc-hash 2.1.1",
+ "sync-unsafe-cell",
  "talc",
  "thiserror 2.0.12",
  "x86-64",
@@ -4148,6 +4150,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "sync-unsafe-cell"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8deaecba5382c095cb432cd1e21068dadb144208f057b13720e76bf89749beb4"
 
 [[package]]
 name = "synstructure"

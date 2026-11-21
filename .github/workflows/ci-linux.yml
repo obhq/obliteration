@@ -30,7 +30,7 @@ jobs:
         mv dist obliteration
         tar -cvf obliteration.tar obliteration
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: obliteration-linux-amd64
         path: obliteration.tar
