@@ -13,6 +13,8 @@ use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Implementation of `uma_keg` structure.
+///
+/// We don't implement `uk_init` by design since it is not idiomatic to Rust.
 pub struct UmaKeg {
     vm: &'static Vm,
     size: NonZero<usize>,                                  // uk_size
@@ -21,7 +23,6 @@ pub struct UmaKeg {
     ppera: usize,                                          // uk_ppera
     ipers: usize,                                          // uk_ipers
     alloc: fn(&'static Vm, Alloc) -> (*mut u8, SlabFlags), // uk_allocf
-    init: Option<fn()>,                                    // uk_init
     max_pages: usize,                                      // uk_maxpages
     recurse: AtomicU32,                                    // uk_recurse
     flags: UmaFlags,                                       // uk_flags
@@ -42,7 +43,6 @@ impl UmaKeg {
         vm: &'static Vm,
         size: NonZero<usize>,
         align: usize,
-        init: Option<fn()>,
         mut flags: UmaFlags,
     ) -> Arc<Self> {
         if flags.has_any(UmaFlags::Vm) {
@@ -178,7 +178,6 @@ impl UmaKeg {
             ppera,
             ipers,
             alloc,
-            init,
             max_pages: 0,
             recurse: AtomicU32::new(0),
             flags,
@@ -316,10 +315,6 @@ impl UmaKeg {
                     let item = (i + 1).try_into().unwrap();
 
                     unsafe { free.add(i).write(item) };
-                }
-
-                if self.init.is_some() {
-                    todo!()
                 }
 
                 if self.flags.has_any(UmaFlags::Hash) {

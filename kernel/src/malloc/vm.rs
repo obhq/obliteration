@@ -54,9 +54,6 @@ impl VmHeap {
                     size.to_string(),
                     size,
                     Some(align - 1),
-                    None,
-                    None,
-                    None,
                     UmaFlags::Malloc,
                 ));
 

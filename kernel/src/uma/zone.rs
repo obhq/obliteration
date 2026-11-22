@@ -17,6 +17,9 @@ use core::ptr::{NonNull, null_mut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Implementation of `uma_zone` structure.
+///
+/// We don't implement `uz_init`, `uz_ctor` and `uz_dtor` by design since it is not idiomatic to
+/// Rust.
 pub struct UmaZone {
     bucket_enable: Arc<AtomicBool>,
     bucket_keys: Arc<Vec<usize>>,
@@ -24,9 +27,6 @@ pub struct UmaZone {
     ty: ZoneType,
     size: NonZero<usize>,                                              // uz_size
     slab: unsafe fn(&Arc<UmaKeg>, Alloc) -> Option<Pin<Strong<Slab>>>, // uz_slab
-    init: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,          // uz_init
-    ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>,          // uz_ctor
-    dtor: Option<fn()>,                                                // uz_dtor
     caches: CpuLocal<RefCell<UmaCache>>,                               // uz_cpu
     state: Mutex<ZoneState>,
 }
@@ -61,7 +61,6 @@ impl UmaZone {
                     vm,
                     args.size,
                     args.align.unwrap_or(Self::ALIGN_CACHE),
-                    args.init,
                     flags,
                 ),
             };
@@ -123,9 +122,6 @@ impl UmaZone {
             ty,
             size: keg.size(),
             slab: Self::fetch_slab,
-            init: None,
-            ctor: args.ctor,
-            dtor: args.dtor,
             caches: CpuLocal::new(|_| RefCell::default()),
             state: Mutex::new(ZoneState {
                 kegs: LinkedList::from([keg]),
@@ -242,11 +238,7 @@ impl UmaZone {
             unsafe { m.write_bytes(0, self.size.get()) };
         }
 
-        if self.ctor.is_none_or(move |f| f(m, self.size, flags)) {
-            m
-        } else {
-            todo!()
-        }
+        m
     }
 
     /// See `uma_zfree_arg` on the Orbis for a reference.
@@ -261,8 +253,6 @@ impl UmaZone {
     pub unsafe fn free(&self, item: *mut u8) {
         if item.is_null() {
             return;
-        } else if self.dtor.is_some() {
-            todo!()
         }
 
         // Check zone type.
@@ -474,10 +464,6 @@ impl UmaZone {
                 f |= Alloc::NoWait;
             }
 
-            if self.init.is_some() {
-                todo!()
-            }
-
             state.fills -= 1;
 
             if b.hdr.len != 0 {
@@ -510,19 +496,11 @@ impl UmaZone {
 
             state.alloc_count += 1;
 
-            if self.init.is_none_or(|f| f(item, self.size, flags)) {
-                if self.ctor.is_none_or(|f| f(item, self.size, flags)) {
-                    if flags.has_any(Alloc::Zero) {
-                        unsafe { item.write_bytes(0, self.size.get()) };
-                    }
-
-                    return item;
-                } else {
-                    todo!()
-                }
-            } else {
-                todo!()
+            if flags.has_any(Alloc::Zero) {
+                unsafe { item.write_bytes(0, self.size.get()) };
             }
+
+            return item;
         }
 
         todo!()
@@ -595,12 +573,9 @@ unsafe impl Send for UmaCache {}
 
 /// Implementation of `uma_zctor_args` structure.
 pub struct ZoneArgs {
-    pub name: String,                                             // name
-    pub keg: Option<Arc<UmaKeg>>,                                 // keg
-    pub size: NonZero<usize>,                                     // size
-    pub align: Option<usize>,                                     // align
-    pub init: Option<fn()>,                                       // uminit
-    pub ctor: Option<fn(*mut u8, NonZero<usize>, Alloc) -> bool>, // ctor
-    pub dtor: Option<fn()>,                                       // dtor
-    pub flags: UmaFlags,                                          // flags
+    pub name: String,             // name
+    pub keg: Option<Arc<UmaKeg>>, // keg
+    pub size: NonZero<usize>,     // size
+    pub align: Option<usize>,     // align
+    pub flags: UmaFlags,          // flags
 }
